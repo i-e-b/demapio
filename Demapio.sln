@@ -2,6 +2,8 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demapio", "Demapio\Demapio.csproj", "{710C31AC-B169-421C-874C-2E8225119BF0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DemapioTests", "DemapioTests\DemapioTests.csproj", "{0C1F5C56-51E9-40B8-A090-63788CF86646}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -12,5 +14,9 @@ Global
 		{710C31AC-B169-421C-874C-2E8225119BF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{710C31AC-B169-421C-874C-2E8225119BF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{710C31AC-B169-421C-874C-2E8225119BF0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0C1F5C56-51E9-40B8-A090-63788CF86646}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0C1F5C56-51E9-40B8-A090-63788CF86646}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0C1F5C56-51E9-40B8-A090-63788CF86646}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0C1F5C56-51E9-40B8-A090-63788CF86646}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
