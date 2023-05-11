@@ -6,18 +6,31 @@ using System.Text;
 namespace Demapio;
 
 /// <summary>
-/// Extension methods for Demapio
+/// Extension methods for Demapio, the tiny ORM
 /// </summary>
 public static class Demapio
 {
     /// <summary>
-    /// Poor man's Dapper, here so we don't bring library dependencies with us.
+    /// Repeat a single command with multiple parameter objects.
+    /// <p>This does not return values. It should be used for batch inserts etc.</p>
     /// </summary>
-    public static object? SimpleSelect(this IDbConnection conn, string queryText, object? parameters)
+    public static void RepeatCommand(this IDbConnection conn, string queryText, params object[] parameterObjects)
+    {
+        foreach (var obj in parameterObjects)
+        {
+            conn.QueryValue(queryText, obj);
+        }
+    }
+
+    /// <summary>
+    /// Run a SQL command or query, returning a single value.
+    /// </summary>
+    public static object? QueryValue(this IDbConnection conn, string queryText, object? parameters = null)
     {
         if (conn.State != ConnectionState.Open) conn.Open();
 
         using var cmd = conn.CreateCommand();
+        if (cmd.Parameters is null) throw new Exception("Database command did not populate Parameters");
         cmd.CommandType = CommandType.Text;
         cmd.CommandText = queryText;
 
@@ -42,11 +55,17 @@ public static class Demapio
     /// <p>Resulting column names will be mapped to the properties of <c>T</c> by name, case insensitive</p>
     /// </summary>
     /// <typeparam name="T">Result object. Must have a public constructor with no parameters, and public settable properties matching the result columns</typeparam>
-    private static IEnumerable<T> ParameterSelect<T>(this IDbConnection conn, string queryText, object? parameters) where T : new()
+    public static IEnumerable<T> SelectType<T>(this IDbConnection conn, string queryText, object? parameters) where T : new()
     {
-        if (conn.State != ConnectionState.Open) conn.Open();
+        var shouldClose = false;
+        if (conn.State != ConnectionState.Open)
+        {
+            shouldClose = true;
+            conn.Open();
+        }
 
         using var cmd = conn.CreateCommand();
+        if (cmd.Parameters is null) throw new Exception("Database command did not populate Parameters");
         cmd.CommandType = CommandType.Text;
         cmd.CommandText = queryText;
 
@@ -65,7 +84,7 @@ public static class Demapio
         using var reader = cmd.ExecuteReader();
         var result = new List<T>();
 
-        while (reader.Read())
+        while (reader?.Read() == true)
         {
             if (setters.Count < 1) CacheWritableProperties<T>(setters);
             var count = reader.FieldCount;
@@ -77,7 +96,7 @@ public static class Demapio
 
                 try
                 {
-                    setter?.SetValue(item, reader.GetValue(i));
+                    setter?.SetValue(item, reader.GetValue(i)!);
                 }
                 catch
                 {
@@ -88,7 +107,7 @@ public static class Demapio
             result.Add(item);
         }
 
-        conn.Close();
+        if (shouldClose) conn.Close();
         return result;
     }
 
@@ -104,8 +123,9 @@ public static class Demapio
         return result;
     }
     
-    private static string NormaliseName(string name)
+    private static string NormaliseName(string? name)
     {
+        if (name is null) return "";
         var sb = new StringBuilder();
         foreach (char c in name)
         {
