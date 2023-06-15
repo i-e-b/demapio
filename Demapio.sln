@@ -4,6 +4,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demapio", "Demapio\Demapio.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DemapioTests", "DemapioTests\DemapioTests.csproj", "{0C1F5C56-51E9-40B8-A090-63788CF86646}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "_Info", "_Info", "{5EA96445-5F55-4D53-B21E-C31AF753A3B6}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+		global.json = global.json
+		LICENSE = LICENSE
+		README.md = README.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

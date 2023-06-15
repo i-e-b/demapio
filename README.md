@@ -16,4 +16,31 @@ No guarantees on speed.
 
 ### How?
 
-** TODO **
+Select a single value:
+
+```
+var conn = new NpgsqlConnection(ConnStr);
+
+object? result = conn.QueryValue("SELECT ('Hello, ' || :para) as result;", new { para = "world" });
+```
+
+Query data to a list of C# objects:
+
+```
+var conn = new NpgsqlConnection(ConnStr);
+
+var result = conn.SelectType<SamplePoco>("SELECT * FROM TestTable WHERE userId=:userId", new {userId = 10}).ToList()!;
+```
+
+Repeat a single statement with a batch of parameters:
+
+```
+var conn = new NpgsqlConnection(ConnStr);
+
+conn.RepeatCommand("INSERT INTO TestTable (id, userId, deviceId) VALUES (:id, :userId, :deviceId);",
+    new {id=1, userId=10, deviceId="User10 Phone"},
+    new {id=2, userId=10, deviceId="User10 PC"},
+    new {id=3, userId=20, deviceId="User20 Phone"},
+    new {id=4, userId=20, deviceId="User20 Modem"}
+);
+```

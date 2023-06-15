@@ -30,7 +30,7 @@ public class DemapioTests
     {
         var conn = new NpgsqlConnection(ConnStr);
 
-        var result = conn.QueryValue("SELECT ('Hello, ' || :para) as result;", new { para = "world" });
+        object? result = conn.QueryValue("SELECT ('Hello, ' || :para) as result;", new { para = "world" });
         
         Assert.That(result, Is.Not.Null);
         Console.WriteLine(result);
