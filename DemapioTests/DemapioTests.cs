@@ -24,7 +24,8 @@ namespace DemapioTests;
 public class DemapioTests
 {
     private const string ConnStr = @"Server=127.0.0.1;Port=26299;Database=testdb;User Id=root;Include Error Detail=true;CommandTimeout=360;Enlist=false;No Reset On Close=true;";
-    
+
+
     [Test]
     public void querying_to_a_primitive_type()
     {
@@ -63,11 +64,75 @@ CREATE TABLE IF NOT EXISTS TestTable (
         );
         
         // Query data back out
-        var result = conn.SelectType<SamplePoco>("SELECT * FROM TestTable WHERE userId=:userId", new {userId = 10}).ToList()!;
+        var result = conn.SelectType<SamplePoco>("SELECT * FROM TestTable WHERE userId=:userId", new {userId = 10}).ToList();
             
         Assert.That(result, Is.Not.Null);
         Console.WriteLine(string.Join(", ", result));
         Assert.That(string.Join(", ", result), Is.EqualTo("Id=0; UserId=10; DeviceId='User10 Phone', Id=0; UserId=10; DeviceId='User10 PC'"));
+    }
+
+    [Test]
+    public void can_give_a_null_value_in_query_parameters()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+        
+        // Create a test table
+        conn.QueryValue(@"
+CREATE TABLE IF NOT EXISTS TestTable (
+    id        int  not null constraint ""primary"" primary key,
+    userId    bigint not null,
+    deviceId  text
+);
+");
+        // Make sure it's empty
+        conn.QueryValue("TRUNCATE TABLE TestTable CASCADE;");
+        
+        // Add some test data
+        conn.RepeatCommand("INSERT INTO TestTable (id, userId, deviceId) VALUES (:id, :userId, :deviceId);",
+            new {id=1, userId=10, deviceId=(string?)null},
+            new {id=2, userId=10, deviceId="User10 PC"},
+            new {id=3, userId=20, deviceId=(string?)null},
+            new {id=4, userId=20, deviceId="User20 Modem"}
+        );
+        
+        // Query data back out
+        var result = conn.SelectType<SamplePoco>("SELECT * FROM TestTable WHERE userId=:userId", new {userId = 10}).ToList();
+            
+        Assert.That(result, Is.Not.Null);
+        Console.WriteLine(string.Join(", ", result));
+        Assert.That(string.Join(", ", result), Is.EqualTo("Id=0; UserId=10; DeviceId='', Id=0; UserId=10; DeviceId='User10 PC'"));
+    }
+    
+    [Test]
+    public void can_supply_query_parameters_as_a_string_object_dictionary()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+        
+        // Create a test table
+        conn.QueryValue(@"
+CREATE TABLE IF NOT EXISTS TestTable (
+    id        int  not null constraint ""primary"" primary key,
+    userId    bigint not null,
+    deviceId  text
+);
+");
+        // Make sure it's empty
+        conn.QueryValue("TRUNCATE TABLE TestTable CASCADE;");
+        
+        // Add some test data
+        conn.RepeatCommand("INSERT INTO TestTable (id, userId, deviceId) VALUES (:id, :userId, :deviceId);",
+            new Dictionary<string, object?> { { "id", 1 }, { "userId", 10 }, { "deviceId", null } },
+            new Dictionary<string, object?> { { "id", 2 }, { "userId", 10 }, { "deviceId", "User10 PC" } },
+            new Dictionary<string, object?> { { "id", 3 }, { "userId", 20 }, { "deviceId", null } },
+            new Dictionary<string, object?> { { "id", 4 }, { "userId", 20 }, { "deviceId", "User20 Modem" } }
+        );
+        
+        // Query data back out
+        var result = conn.SelectType<SamplePoco>("SELECT * FROM TestTable WHERE userId=:userId", new {userId = 10}).ToList();
+            
+        Assert.That(result, Is.Not.Null);
+        Console.WriteLine(string.Join(", ", result));
+        Assert.That(string.Join(", ", result), Is.EqualTo("Id=0; UserId=10; DeviceId='', Id=0; UserId=10; DeviceId='User10 PC'"));
     }
 }
 
@@ -75,7 +140,7 @@ public class SamplePoco
 {
     public int Id { get; set; }
     public long UserId { get; set; }
-    public string DeviceId { get; set; }="";
+    public string? DeviceId { get; set; }
 
     public override string ToString()
     {

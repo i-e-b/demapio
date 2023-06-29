@@ -34,15 +34,7 @@ public static class Demapio
         cmd.CommandType = CommandType.Text;
         cmd.CommandText = queryText;
 
-        if (parameters != null)
-        {
-            var props = TypeDescriptor.GetProperties(parameters);
-            foreach (PropertyDescriptor prop in props)
-            {
-                var val = prop.GetValue(parameters);
-                cmd.Parameters.Add(MapParameter(cmd, prop.Name, val));
-            }
-        }
+        AddParameters(parameters, cmd);
 
         var result = cmd.ExecuteScalar();
         conn.Close();
@@ -69,16 +61,7 @@ public static class Demapio
         cmd.CommandType = CommandType.Text;
         cmd.CommandText = queryText;
 
-        if (parameters != null)
-        {
-            var props = TypeDescriptor.GetProperties(parameters);
-            foreach (PropertyDescriptor prop in props)
-            {
-                var val = prop.GetValue(parameters);
-                if (val is null) continue;
-                cmd.Parameters.Add(MapParameter(cmd, prop.Name, val));
-            }
-        }
+        AddParameters(parameters, cmd);
 
         var setters = new Dictionary<string, PropertyInfo>();
         using var reader = cmd.ExecuteReader();
@@ -111,10 +94,51 @@ public static class Demapio
         return result;
     }
 
+    private static void AddParameters(object? parameters, IDbCommand cmd)
+    {
+        if (parameters is null || cmd.Parameters is null) return;
+
+        if (parameters is IDictionary<string, object?> dict)
+        {
+            foreach (var (name, val) in dict)
+            {
+                if (name is null) continue;
+                cmd.Parameters.Add(
+                    val is null
+                        ? NullParameter(cmd, name)
+                        : MapParameter(cmd, name, val));
+            }
+        }
+        else
+        {
+            var props = TypeDescriptor.GetProperties(parameters);
+            foreach (PropertyDescriptor prop in props)
+            {
+                var val = prop.GetValue(parameters);
+                cmd.Parameters.Add(
+                    val is null
+                        ? NullParameter(cmd, prop.Name)
+                        : MapParameter(cmd, prop.Name, val));
+            }
+        }
+    }
+    
     private static IDbDataParameter MapParameter(IDbCommand cmd, string propName, object? val)
     {
         var result = cmd.CreateParameter();
         result.Value = val;
+        result.ParameterName = propName;
+        result.SourceColumn = propName;
+        
+        result.DbType = DbType.Object; // For Npgsql, this means "you work it out"
+        result.Direction = ParameterDirection.Input;
+        return result;
+    }
+    
+    private static IDbDataParameter NullParameter(IDbCommand cmd, string propName)
+    {
+        var result = cmd.CreateParameter();
+        result.Value = DBNull.Value;
         result.ParameterName = propName;
         result.SourceColumn = propName;
         
