@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
 
@@ -77,14 +78,7 @@ public static class Demapio
                 var column = NormaliseName(reader.GetName(i));
                 if (!setters.TryGetValue(column, out var setter)) continue; // not writable column
 
-                try
-                {
-                    setter?.SetValue(item, reader.GetValue(i)!);
-                }
-                catch
-                {
-                    /* ignore? */
-                }
+                TrySetValue(setter, item, reader, i);
             }
 
             result.Add(item);
@@ -92,6 +86,52 @@ public static class Demapio
 
         if (shouldClose) conn.Close();
         return result;
+    }
+
+    private static void TrySetValue<T>(PropertyInfo? setter, [DisallowNull] T item, IDataReader reader, int i) where T : new()
+    {
+        if (setter is null) return;
+        var value = reader.GetValue(i);
+        
+        try
+        {
+            if (value is null || value == DBNull.Value)
+            {
+                setter.SetValue(item, null!);
+                return;
+            }
+
+            var targetType = setter.PropertyType;
+
+            if (targetType.IsInstanceOfType(value)) // Simple case: type can be converted
+            {
+                setter.SetValue(item, value);
+                return;
+            }
+
+            if (!targetType.IsEnum)
+            {
+                setter.SetValue(item, Convert.ChangeType(value, targetType)!);
+                return;
+            }
+
+            // cast enums to base type, or parse from string
+            if (value is string str) // try to parse
+            {
+                setter.SetValue(item, Enum.Parse(targetType, str));
+            }
+            else // try to directly cast to underlying type
+            {
+                var enumType = Enum.GetUnderlyingType(targetType);
+                var enumValue = Convert.ChangeType(value, enumType);
+
+                setter.SetValue(item, enumValue!);
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidCastException($"Could not cast {value?.GetType().Name ?? "<null>"} to {setter.PropertyType.Name} for property {typeof(T).Name}.{setter.Name}", ex);
+        }
     }
 
     private static void AddParameters(object? parameters, IDbCommand cmd)
@@ -126,7 +166,7 @@ public static class Demapio
     private static IDbDataParameter MapParameter(IDbCommand cmd, string propName, object? val)
     {
         var result = cmd.CreateParameter();
-        result.Value = val;
+        result.Value = TypeNormalise(val);
         result.ParameterName = propName;
         result.SourceColumn = propName;
         
@@ -134,7 +174,17 @@ public static class Demapio
         result.Direction = ParameterDirection.Input;
         return result;
     }
-    
+
+    private static object? TypeNormalise(object? val)
+    {
+        if (val is null) return val;
+        if (!val.GetType().IsEnum) return val; // pass normal types directly
+        
+        // cast enums to base type
+        var type = Enum.GetUnderlyingType(val.GetType());
+        return Convert.ChangeType(val, type);
+    }
+
     private static IDbDataParameter NullParameter(IDbCommand cmd, string propName)
     {
         var result = cmd.CreateParameter();
