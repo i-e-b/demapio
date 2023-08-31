@@ -92,7 +92,7 @@ public static class Demapio
     {
         if (setter is null) return;
         var value = reader.GetValue(i);
-        
+
         try
         {
             if (value is null || value == DBNull.Value)
@@ -101,31 +101,33 @@ public static class Demapio
                 return;
             }
 
-            var targetType = setter.PropertyType;
+            var isNullableWrapped = Nullable.GetUnderlyingType(setter.PropertyType) is not null;
+            var targetType = Nullable.GetUnderlyingType(setter.PropertyType) ?? setter.PropertyType;
 
             if (targetType.IsInstanceOfType(value)) // Simple case: type can be converted
             {
                 setter.SetValue(item, value);
-                return;
             }
-
-            if (!targetType.IsEnum)
+            else if (targetType.IsEnum)
             {
-                setter.SetValue(item, Convert.ChangeType(value, targetType)!);
-                return;
+                // cast enums to base type, or parse from string
+                if (value is string str) // try to parse
+                {
+                    setter.SetValue(item, Enum.Parse(targetType, str));
+                }
+                else // try to directly cast to underlying type
+                {
+                    var enumType = Enum.GetUnderlyingType(targetType);
+                    var basicValue = Convert.ChangeType(value, enumType);
+                    var enumValue = Enum.ToObject(targetType, basicValue!);
+                    setter.SetValue(item, enumValue);
+                }
             }
-
-            // cast enums to base type, or parse from string
-            if (value is string str) // try to parse
+            else // not exactly the type, and not an enum
             {
-                setter.SetValue(item, Enum.Parse(targetType, str));
-            }
-            else // try to directly cast to underlying type
-            {
-                var enumType = Enum.GetUnderlyingType(targetType);
-                var enumValue = Convert.ChangeType(value, enumType);
-
-                setter.SetValue(item, enumValue!);
+                var baseType = Nullable.GetUnderlyingType(targetType);
+                if (baseType is not null) setter.SetValue(item, Convert.ChangeType(value, baseType)!);
+                else setter.SetValue(item, Convert.ChangeType(value, targetType)!);
             }
         }
         catch (Exception ex)
@@ -162,14 +164,14 @@ public static class Demapio
             }
         }
     }
-    
+
     private static IDbDataParameter MapParameter(IDbCommand cmd, string propName, object? val)
     {
         var result = cmd.CreateParameter();
         result.Value = TypeNormalise(val);
         result.ParameterName = propName;
         result.SourceColumn = propName;
-        
+
         result.DbType = DbType.Object; // For Npgsql, this means "you work it out"
         result.Direction = ParameterDirection.Input;
         return result;
@@ -179,7 +181,7 @@ public static class Demapio
     {
         if (val is null) return val;
         if (!val.GetType().IsEnum) return val; // pass normal types directly
-        
+
         // cast enums to base type
         var type = Enum.GetUnderlyingType(val.GetType());
         return Convert.ChangeType(val, type);
@@ -191,12 +193,12 @@ public static class Demapio
         result.Value = DBNull.Value;
         result.ParameterName = propName;
         result.SourceColumn = propName;
-        
+
         result.DbType = DbType.Object; // For Npgsql, this means "you work it out"
         result.Direction = ParameterDirection.Input;
         return result;
     }
-    
+
     private static string NormaliseName(string? name)
     {
         if (name is null) return "";

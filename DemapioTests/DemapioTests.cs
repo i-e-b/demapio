@@ -234,6 +234,51 @@ CREATE TABLE IF NOT EXISTS EnumStrTable (
         Console.WriteLine(string.Join(", ", result));
         Assert.That(string.Join(", ", result), Is.EqualTo("2: APAC/Oceania/Philippines = 10.02, 4: APAC/Subcontinent/SriLanka = 20.04"));
     }
+
+    [Test]
+    public void can_assign_primitive_values_to_nullable_properties()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+        
+        // Create a test table
+        conn.QueryValue(@"
+CREATE TABLE IF NOT EXISTS PrimitivesValues (
+    nLong bigint,
+    nInt  int,
+    nEnum int
+);
+");
+        // Make sure it's empty
+        conn.QueryValue("TRUNCATE TABLE PrimitivesValues CASCADE;");
+        
+        // Add some test data
+        conn.RepeatCommand("INSERT INTO PrimitivesValues (nLong, nInt, nEnum) VALUES (:nLong, :nInt, :nEnum);",
+            new { nLong = 123L, nInt = 456, nEnum = GeoZone.EMEA }, // with all populated
+            new { nLong = (long?)null, nInt = 456, nEnum = GeoZone.EMEA }, // a primitive missing
+            new { nLong = 123L, nInt = 456, nEnum = (GeoZone?)null } // an enum missing
+        );
+        
+        // Query data back out
+        var result = conn.SelectType<NullablePrimitives>("SELECT * FROM PrimitivesValues;", null).ToList();
+            
+        Assert.That(result, Is.Not.Null);
+        Console.WriteLine(string.Join(", ", result));
+        Assert.That(string.Join(", ", result), Is.EqualTo("NLong=123; NInt=456; NEnum='EMEA', NLong=<null>; NInt=456; NEnum='EMEA', NLong=123; NInt=456; NEnum='<null>'"));
+    }
+}
+
+public class NullablePrimitives
+{
+    public long? NLong { get; set; }
+    public int? NInt { get; set; }
+    public GeoZone? NEnum { get; set; }
+
+    private static string MarkNulls<T>(T thing) => thing?.ToString() ?? "<null>";
+
+    public override string ToString()
+    {
+        return $"NLong={MarkNulls(NLong)}; NInt={MarkNulls(NInt)}; NEnum='{MarkNulls(NEnum)}'";
+    }
 }
 
 public class PocoWithEnums
