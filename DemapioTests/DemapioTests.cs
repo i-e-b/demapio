@@ -25,7 +25,6 @@ public class DemapioTests
 {
     private const string ConnStr = @"Server=127.0.0.1;Port=26299;Database=testdb;User Id=root;Include Error Detail=true;CommandTimeout=360;Enlist=false;No Reset On Close=true;";
 
-
     [Test]
     public void querying_to_a_primitive_type()
     {
@@ -265,6 +264,89 @@ CREATE TABLE IF NOT EXISTS PrimitivesValues (
         Console.WriteLine(string.Join(", ", result));
         Assert.That(string.Join(", ", result), Is.EqualTo("NLong=123; NInt=456; NEnum='EMEA', NLong=<null>; NInt=456; NEnum='EMEA', NLong=123; NInt=456; NEnum='<null>'"));
     }
+
+    [Test]
+    public void can_write_and_query_byte_array_types()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+        
+        // Create a test table
+        conn.QueryValue(@"
+CREATE TABLE IF NOT EXISTS ByteArrayValues (
+    id   int,
+    data bytea
+);
+");
+        // Make sure it's empty
+        conn.QueryValue("TRUNCATE TABLE ByteArrayValues CASCADE;");
+        
+        // Add some test data
+        conn.RepeatCommand("INSERT INTO ByteArrayValues (id, data) VALUES (:id, :data);",
+            
+            new { id = 1, data= new byte[]{1,2,3,4,5}}, // byte array as input
+            new { id = 1, data= new List<byte>{6,7,8,9,10}}, // byte list as input
+            new { id = 1, data= (IEnumerable<byte>)(new byte[]{1,2,3,4,5})}  // byte enumerable as input
+        );
+        
+        // Query data back out as array
+        var result1 = conn.SelectType<ByteArrayValue>("SELECT * FROM ByteArrayValues;", null).ToList();
+            
+        Assert.That(result1, Is.Not.Null);
+        Console.WriteLine(string.Join(", ", result1));
+        Assert.That(string.Join(", ", result1), Is.EqualTo("ID=1; Data='0102030405', ID=1; Data='060708090A', ID=1; Data='0102030405'"));
+        
+        
+        // Query data back out as list
+        var result2 = conn.SelectType<ByteListValue>("SELECT * FROM ByteArrayValues;", null).ToList();
+            
+        Assert.That(result2, Is.Not.Null);
+        Console.WriteLine(string.Join(", ", result2));
+        Assert.That(string.Join(", ", result2), Is.EqualTo("ID=1; Data='0102030405', ID=1; Data='060708090A', ID=1; Data='0102030405'"));
+        
+        
+        // Query data back out as an IEnumerable interface
+        var result3 = conn.SelectType<ByteEnumerableValue>("SELECT * FROM ByteArrayValues;", null).ToList();
+            
+        Assert.That(result3, Is.Not.Null);
+        Console.WriteLine(string.Join(", ", result3));
+        Assert.That(string.Join(", ", result3), Is.EqualTo("ID=1; Data='0102030405', ID=1; Data='060708090A', ID=1; Data='0102030405'"));
+
+    }
+}
+
+// ReSharper disable InconsistentNaming
+// ReSharper disable UnusedMember.Global
+
+public class ByteArrayValue
+{
+    public int Id { get; set; }
+    public byte[] Data { get; set; } = Array.Empty<byte>();
+    
+    public override string ToString()
+    {
+        return $"ID={Id}; Data='{Convert.ToHexString(Data)}'";
+    }
+}
+public class ByteListValue
+{
+    public int Id { get; set; }
+    public List<byte> Data { get; set; } = new();
+    
+    public override string ToString()
+    {
+        return $"ID={Id}; Data='{Convert.ToHexString(Data.ToArray())}'";
+    }
+}
+public class ByteEnumerableValue
+{
+    public int Id { get; set; }
+    public IEnumerable<byte>? Data { get; set; }
+    
+    public override string ToString()
+    {
+        if (Data is null) return $"ID={Id}; Data=<null>";
+        return $"ID={Id}; Data='{Convert.ToHexString(Data.ToArray())}'";
+    }
 }
 
 public class NullablePrimitives
@@ -310,9 +392,7 @@ public class SamplePoco
 
 public enum GeoZone : long
 {
-    // ReSharper disable InconsistentNaming
     APAC, EMEA, AMER
-    // ReSharper restore InconsistentNaming
 }
 
 public enum GeoLandmass: long

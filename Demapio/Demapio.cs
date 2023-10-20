@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using System.Collections;
+using System.ComponentModel;
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
@@ -101,8 +102,8 @@ public static class Demapio
                 return;
             }
 
-            var isNullableWrapped = Nullable.GetUnderlyingType(setter.PropertyType) is not null;
             var targetType = Nullable.GetUnderlyingType(setter.PropertyType) ?? setter.PropertyType;
+            var targetIsListType = typeof(IEnumerable).IsAssignableFrom(targetType);
 
             if (targetType.IsInstanceOfType(value)) // Simple case: type can be converted
             {
@@ -121,6 +122,20 @@ public static class Demapio
                     var basicValue = Convert.ChangeType(value, enumType);
                     var enumValue = Enum.ToObject(targetType, basicValue!);
                     setter.SetValue(item, enumValue);
+                }
+            }
+            else if (targetIsListType)
+            {
+                var expectedType = typeof(IEnumerable<>).MakeGenericType(targetType.GetGenericArguments());
+                var enumerableConstructor = targetType.GetConstructor(new[]{expectedType});
+                if (enumerableConstructor is not null)
+                {
+                    var newInstance = enumerableConstructor.Invoke(new[]{value}) ?? throw new Exception($"Constructor on type {targetType.Name} returned null");
+                    setter.SetValue(item, newInstance);
+                }
+                else
+                {
+                    throw new Exception($"Target type {targetType.Name} does not have a constructor taking {expectedType.Name}");
                 }
             }
             else // not exactly the type, and not an enum
@@ -180,11 +195,21 @@ public static class Demapio
     private static object? TypeNormalise(object? val)
     {
         if (val is null) return val;
-        if (!val.GetType().IsEnum) return val; // pass normal types directly
 
-        // cast enums to base type
-        var type = Enum.GetUnderlyingType(val.GetType());
-        return Convert.ChangeType(val, type);
+        if (val is IEnumerable<byte> byteList)
+        {
+            return byteList.ToArray();
+        }
+
+        if (val.GetType().IsEnum)
+        {
+            // cast enums to base type
+            var type = Enum.GetUnderlyingType(val.GetType());
+            return Convert.ChangeType(val, type);
+        }
+
+        // Anything else gets passed through
+        return val;
     }
 
     private static IDbDataParameter NullParameter(IDbCommand cmd, string propName)
