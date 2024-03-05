@@ -370,7 +370,7 @@ public static class Demapio
         if (val is ulong vUlong) return (long)vUlong;
         
         // For dates, change unspecified kind to UTC
-        if (val is DateTime dt && dt.Kind == DateTimeKind.Unspecified) return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+        if (val is DateTime dt) return DateTime.SpecifyKind(dt, DateTimeKind.Unspecified);
 
         // Anything else gets passed through
         return val;

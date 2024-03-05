@@ -410,7 +410,7 @@ CREATE TABLE IF NOT EXISTS TestTable (
     }
 
     [Test]
-    public void unspecified_dates_are_taken_as_utc()
+    public void dates_are_taken_as_unspecified_time_zone()
     {
         var conn = new NpgsqlConnection(ConnStr);
         
@@ -419,11 +419,12 @@ CREATE TABLE IF NOT EXISTS TestTable (
             NullableDateOne = null,
             NullableDateTwo = new DateTime(2024, 6,5,4,3,2, DateTimeKind.Local),
             DateOne = new DateTime(2024, 6,5,4,3,2, DateTimeKind.Unspecified),
-            DateTwo = new DateTime(2024, 6,5,4,3,2, DateTimeKind.Utc)
+            DateTwo = new DateTime(2024, 6,5,4,3,2, DateTimeKind.Utc),
+            DateThree = new DateTime(2024, 6,5,4,3,2, DateTimeKind.Local),
         };
-
+        
         var result = conn.SelectType<DateTimeValues>(
-            "SELECT :NullableDateOne::timestamp as NullableDateOne, :NullableDateTwo as NullableDateTwo, :DateOne as DateOne, :DateTwo as DateTwo;",
+            "SELECT :NullableDateOne::timestamp as NullableDateOne, :NullableDateTwo as NullableDateTwo, :DateOne as DateOne, :DateTwo as DateTwo, :DateThree::TimestampTz as DateThree;",
             original).FirstOrDefault();
         
         Assert.That(result, Is.Not.Null);
@@ -432,6 +433,7 @@ CREATE TABLE IF NOT EXISTS TestTable (
         Assert.That(result.NullableDateTwo.Value.ToString("yyyy-MM-dd HH:mm:ss"), Is.EqualTo("2024-06-05 04:03:02"));
         Assert.That(result.DateOne.ToString("yyyy-MM-dd HH:mm:ss"), Is.EqualTo("2024-06-05 04:03:02"));
         Assert.That(result.DateTwo.ToString("yyyy-MM-dd HH:mm:ss"), Is.EqualTo("2024-06-05 04:03:02"));
+        Assert.That(result.DateThree.ToString("yyyy-MM-dd HH:mm:ss"), Is.EqualTo("2024-06-05 04:03:02"));
     }
 }
 
@@ -445,6 +447,7 @@ public class DateTimeValues
     public DateTime? NullableDateTwo { get; set; }
     public DateTime DateOne { get; set; }
     public DateTime DateTwo { get; set; }
+    public DateTime DateThree { get; set; }
 }
 
 public class ByteArrayValue
