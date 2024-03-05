@@ -1,6 +1,8 @@
 ﻿using Demapio;
 using Npgsql;
 using NUnit.Framework;
+// ReSharper disable AssignNullToNotNullAttribute
+#pragma warning disable CS8629 // Nullable value type may be null.
 #pragma warning disable CS8602
 
 namespace DemapioTests;
@@ -258,7 +260,7 @@ CREATE TABLE IF NOT EXISTS PrimitivesValues (
         );
         
         // Query data back out
-        var result = conn.SelectType<NullablePrimitives>("SELECT * FROM PrimitivesValues;", null).ToList();
+        var result = conn.SelectType<NullablePrimitives>("SELECT * FROM PrimitivesValues;").ToList();
             
         Assert.That(result, Is.Not.Null);
         Console.WriteLine(string.Join(", ", result));
@@ -289,7 +291,7 @@ CREATE TABLE IF NOT EXISTS ByteArrayValues (
         );
         
         // Query data back out as array
-        var result1 = conn.SelectType<ByteArrayValue>("SELECT * FROM ByteArrayValues;", null).ToList();
+        var result1 = conn.SelectType<ByteArrayValue>("SELECT * FROM ByteArrayValues;").ToList();
             
         Assert.That(result1, Is.Not.Null);
         Console.WriteLine(string.Join(", ", result1));
@@ -297,7 +299,7 @@ CREATE TABLE IF NOT EXISTS ByteArrayValues (
         
         
         // Query data back out as list
-        var result2 = conn.SelectType<ByteListValue>("SELECT * FROM ByteArrayValues;", null).ToList();
+        var result2 = conn.SelectType<ByteListValue>("SELECT * FROM ByteArrayValues;").ToList();
             
         Assert.That(result2, Is.Not.Null);
         Console.WriteLine(string.Join(", ", result2));
@@ -305,17 +307,145 @@ CREATE TABLE IF NOT EXISTS ByteArrayValues (
         
         
         // Query data back out as an IEnumerable interface
-        var result3 = conn.SelectType<ByteEnumerableValue>("SELECT * FROM ByteArrayValues;", null).ToList();
+        var result3 = conn.SelectType<ByteEnumerableValue>("SELECT * FROM ByteArrayValues;").ToList();
             
         Assert.That(result3, Is.Not.Null);
         Console.WriteLine(string.Join(", ", result3));
         Assert.That(string.Join(", ", result3), Is.EqualTo("ID=1; Data='0102030405', ID=1; Data='060708090A', ID=1; Data='0102030405'"));
+        
+        
+        // Query data back using a data reader
+        using var result4 = conn.QueryReader("SELECT * FROM ByteArrayValues;");
+            
+        Assert.That(result4, Is.Not.Null);
+        Assert.That(result4.Read(), Is.True);
+    }
+    
+    [Test]
+    public void run_a_query_and_get_count_of_rows_affected()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+        
+        // Create a test table
+        conn.QueryValue(@"
+CREATE TABLE IF NOT EXISTS ByteArrayValues (
+    id   int,
+    data bytea
+);
+");
+        // Make sure it's empty
+        conn.QueryValue("TRUNCATE TABLE ByteArrayValues CASCADE;");
+        
+        // Add some test data
+        conn.RepeatCommand("INSERT INTO ByteArrayValues (id, data) VALUES (:id, :data);",
+            new { id = 1, data= new byte[]{1,2,3,4,5}}, // byte array as input
+            new { id = 2, data= new List<byte>{6,7,8,9,10}}, // byte list as input
+            new { id = 3, data= (IEnumerable<byte>)(new byte[]{1,2,3,4,5})}  // byte enumerable as input
+        );
+        
+        // Update rows, get change count
+        var count = conn.CountCommand("UPDATE ByteArrayValues SET id = 5 WHERE id < 3;");
+            
+        Assert.That(count, Is.EqualTo(2));
+    }
 
+    [Test]
+    public void selecting_type_will_cast_between_integer_types()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+        
+        // Create a test table
+        conn.QueryValue(@"
+CREATE TABLE IF NOT EXISTS TestTable (
+    id        bigint  not null constraint ""primary"" primary key,
+    userId    int not null,
+    deviceId  text
+);
+");
+        // Make sure it's empty
+        conn.QueryValue("TRUNCATE TABLE TestTable CASCADE;");
+        
+        // Add some test data
+        conn.RepeatCommand("INSERT INTO TestTable (id, userId, deviceId) VALUES (:id, :userId, :deviceId);",
+            new {id=1L, userId=1, deviceId="s,s"},
+            new {id=2UL, userId=2, deviceId="u,s"},
+            new {id=3L, userId=3U, deviceId="s,u"},
+            new {id=4UL, userId=4U, deviceId="u,u"}
+        );
+        
+        // Query with different types
+        
+        // int->int
+        var result1 = conn.SelectType<int>("SELECT userId FROM TestTable ORDER BY userId;").ToList();
+        Assert.That(result1, Is.EqualTo(new[]{1,2,3,4}).AsCollection, "Casting int to int");
+        
+        // int->uint
+        var result2 = conn.SelectType<uint>("SELECT userId FROM TestTable ORDER BY userId;").ToList();
+        Assert.That(result2, Is.EqualTo(new uint[]{1,2,3,4}).AsCollection, "Casting int to uint");
+        
+        // int->long
+        var result3 = conn.SelectType<long>("SELECT userId FROM TestTable ORDER BY userId;").ToList();
+        Assert.That(result3, Is.EqualTo(new long[]{1,2,3,4}).AsCollection, "Casting int to long");
+        
+        // int->ulong
+        var result4 = conn.SelectType<ulong>("SELECT userId FROM TestTable ORDER BY userId;").ToList();
+        Assert.That(result4, Is.EqualTo(new ulong[]{1,2,3,4}).AsCollection, "Casting int to ulong");
+        
+        
+        // long->int (may truncate)
+        var result5 = conn.SelectType<int>("SELECT id FROM TestTable ORDER BY id;").ToList();
+        Assert.That(result5, Is.EqualTo(new[]{1,2,3,4}).AsCollection, "Casting long to int");
+        
+        // long->uint (may truncate)
+        var result6 = conn.SelectType<uint>("SELECT id FROM TestTable ORDER BY id;").ToList();
+        Assert.That(result6, Is.EqualTo(new uint[]{1,2,3,4}).AsCollection, "Casting long to uint");
+        
+        // long->long
+        var result7 = conn.SelectType<long>("SELECT id FROM TestTable ORDER BY id;").ToList();
+        Assert.That(result7, Is.EqualTo(new long[]{1,2,3,4}).AsCollection, "Casting long to long");
+        
+        // long->ulong
+        var result8 = conn.SelectType<ulong>("SELECT id FROM TestTable ORDER BY id;").ToList();
+        Assert.That(result8, Is.EqualTo(new ulong[]{1,2,3,4}).AsCollection, "Casting long to ulong");
+    }
+
+    [Test]
+    public void unspecified_dates_are_taken_as_utc()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+        
+        var original = new DateTimeValues
+        {
+            NullableDateOne = null,
+            NullableDateTwo = new DateTime(2024, 6,5,4,3,2, DateTimeKind.Local),
+            DateOne = new DateTime(2024, 6,5,4,3,2, DateTimeKind.Unspecified),
+            DateTwo = new DateTime(2024, 6,5,4,3,2, DateTimeKind.Utc)
+        };
+
+        var result = conn.SelectType<DateTimeValues>(
+            "SELECT :NullableDateOne::timestamp as NullableDateOne, :NullableDateTwo as NullableDateTwo, :DateOne as DateOne, :DateTwo as DateTwo;",
+            original).FirstOrDefault();
+        
+        Assert.That(result, Is.Not.Null);
+        
+        Assert.That(result.NullableDateOne, Is.Null);
+        Assert.That(result.NullableDateTwo.Value.ToString("yyyy-MM-dd HH:mm:ss"), Is.EqualTo("2024-06-05 04:03:02"));
+        Assert.That(result.DateOne.ToString("yyyy-MM-dd HH:mm:ss"), Is.EqualTo("2024-06-05 04:03:02"));
+        Assert.That(result.DateTwo.ToString("yyyy-MM-dd HH:mm:ss"), Is.EqualTo("2024-06-05 04:03:02"));
     }
 }
 
 // ReSharper disable InconsistentNaming
 // ReSharper disable UnusedMember.Global
+// ReSharper disable PropertyCanBeMadeInitOnly.Global
+
+public class DateTimeValues
+{
+    public DateTime? NullableDateOne { get; set; }
+    public DateTime? NullableDateTwo { get; set; }
+    public DateTime DateOne { get; set; }
+    public DateTime DateTwo { get; set; }
+}
 
 public class ByteArrayValue
 {
@@ -330,6 +460,7 @@ public class ByteArrayValue
 public class ByteListValue
 {
     public int Id { get; set; }
+    // ReSharper disable once CollectionNeverUpdated.Global
     public List<byte> Data { get; set; } = new();
     
     public override string ToString()

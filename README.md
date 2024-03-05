@@ -14,6 +14,8 @@ If that works, do it. I keep having trouble with new versions of Dapper being 's
 Demapio does a lot less, and aims to be small and stable rather than big and clever.
 No guarantees on speed.
 
+Demapio deliberately uses unusual names for its extension methods, so it can be easily used alongside Dapper.
+
 ### How?
 
 Select a single value:
@@ -43,4 +45,22 @@ conn.RepeatCommand("INSERT INTO TestTable (id, userId, deviceId) VALUES (:id, :u
     new {id=3, userId=20, deviceId="User20 Phone"},
     new {id=4, userId=20, deviceId="User20 Modem"}
 );
+```
+
+Execute a statement, returning rows changed:
+
+```
+var conn = new NpgsqlConnection(ConnStr);
+
+var changeCount = conn.CountCommand("UPDATE TestTable SET userId = :userId, deviceId = :deviceId WHERE id = :id;", new {id=1, userId=10, deviceId="User10 Phone"});
+if (changeCount < 1) ...
+```
+
+Query data to an IDataReader:
+
+```
+var conn = new NpgsqlConnection(ConnStr);
+
+using var result = conn.QueryReader("SELECT * FROM TestTable WHERE userId=:userId", new {userId = 10});
+while (result.Read()) { ...
 ```

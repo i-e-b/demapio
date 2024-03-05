@@ -4,6 +4,7 @@ using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
+using JetBrains.Annotations;
 
 namespace Demapio;
 
@@ -42,6 +43,45 @@ public static class Demapio
         conn.Close();
         return result;
     }
+    
+    /// <summary>
+    /// Run a SQL command, returning number of rows affected
+    /// </summary>
+    public static int CountCommand(this IDbConnection conn, string queryText, object? parameters = null)
+    {
+        if (conn.State != ConnectionState.Open) conn.Open();
+
+        using var cmd = conn.CreateCommand();
+        if (cmd.Parameters is null) throw new Exception("Database command did not populate Parameters");
+        cmd.CommandType = CommandType.Text;
+        cmd.CommandText = queryText;
+
+        AddParameters(parameters, cmd);
+
+        var result = cmd.ExecuteNonQuery();
+        conn.Close();
+        return result;
+    }
+    
+    /// <summary>
+    /// Run a SQL command or query, returning a data reader.
+    /// You MUST dispose of the resulting reader
+    /// </summary>
+    [MustDisposeResource]
+    public static IDataReader QueryReader(this IDbConnection conn, string queryText, object? parameters = null)
+    {
+        if (conn.State != ConnectionState.Open) conn.Open();
+
+        using var cmd = conn.CreateCommand();
+        if (cmd.Parameters is null) throw new Exception("Database command did not populate Parameters");
+        cmd.CommandType = CommandType.Text;
+        cmd.CommandText = queryText;
+
+        AddParameters(parameters, cmd);
+
+        var result = cmd.ExecuteReader();
+        return result ?? new DummyDataReader();
+    }
 
     /// <summary>
     /// Select a variable number of result objects from a database, using a SQL query and a database connection.
@@ -49,7 +89,7 @@ public static class Demapio
     /// <p>Resulting column names will be mapped to the properties of <c>T</c> by name, case insensitive</p>
     /// </summary>
     /// <typeparam name="T">Result object. Must have a public constructor with no parameters, and public settable properties matching the result columns</typeparam>
-    public static IEnumerable<T> SelectType<T>(this IDbConnection conn, string queryText, object? parameters) where T : new()
+    public static IEnumerable<T> SelectType<T>(this IDbConnection conn, string queryText, object? parameters = null) where T : new()
     {
         var shouldClose = false;
         if (conn.State != ConnectionState.Open)
@@ -69,24 +109,138 @@ public static class Demapio
         using var reader = cmd.ExecuteReader();
         var result = new List<T>();
 
-        while (reader?.Read() == true)
+        if (typeof(T).IsPrimitive) // map first result field to a primitive type
         {
-            if (setters.Count < 1) CacheWritableProperties<T>(setters);
-            var count = reader.FieldCount;
-            var item = new T();
-            for (int i = 0; i < count; i++)
+            while (reader?.Read() == true)
             {
-                var column = NormaliseName(reader.GetName(i));
-                if (!setters.TryGetValue(column, out var setter)) continue; // not writable column
-
-                TrySetValue(setter, item, reader, i);
+                if (reader.FieldCount < 1) continue;
+                
+                var value = CastValue<T>(reader.GetValue(0));
+                if (value is not null) result.Add(value);
             }
+        }
+        else // do property-mapping
+        {
+            while (reader?.Read() == true)
+            {
+                if (setters.Count < 1) CacheWritableProperties<T>(setters);
+                var count = reader.FieldCount;
+                var item = new T();
+                for (int i = 0; i < count; i++)
+                {
+                    var column = NormaliseName(reader.GetName(i));
+                    if (!setters.TryGetValue(column, out var setter)) continue; // not writable column
 
-            result.Add(item);
+                    TrySetValue(setter, item, reader, i);
+                }
+
+                result.Add(item);
+            }
         }
 
         if (shouldClose) conn.Close();
         return result;
+    }
+    
+    /// <summary>
+    /// Try to cast an incoming DB value to a primitive type.
+    /// If a cast is not possible, this will return null.
+    /// <p/>
+    /// This assumes that the database won't return unsigned types, except <c>byte</c>.
+    /// <p/>
+    /// The supported primitive output types are Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Double, Single.
+    /// </summary>
+    private static T? CastValue<T>(object? value)
+    {
+        switch (value)
+        {
+            case T directValue: return directValue;
+            case int int32 when typeof(T) == typeof(int): { var cast = (int)int32; return (T)(object)cast; }
+            case int int32 when typeof(T) == typeof(uint): { var cast = (uint)int32; return (T)(object)cast; }
+            case int int32 when typeof(T) == typeof(long): { var cast = (long)int32; return (T)(object)cast; }
+            case int int32 when typeof(T) == typeof(ulong): { var cast = (ulong)int32; return (T)(object)cast; }
+            case int int32 when typeof(T) == typeof(short): { var cast = (short)int32; return (T)(object)cast; }
+            case int int32 when typeof(T) == typeof(ushort): { var cast = (ushort)int32; return (T)(object)cast; }
+            case int int32 when typeof(T) == typeof(byte): { var cast = (byte)int32; return (T)(object)cast; }
+            case int int32 when typeof(T) == typeof(sbyte): { var cast = (sbyte)int32; return (T)(object)cast; }
+            case int int32 when typeof(T) == typeof(bool): { var cast = int32 == 0; return (T)(object)cast; }
+            case int int32 when typeof(T) == typeof(float): { var cast = (float)int32; return (T)(object)cast; }
+            case int int32 when typeof(T) == typeof(double): { var cast = (double)int32; return (T)(object)cast; }
+            case int int32 when typeof(T) == typeof(char): { var cast = (char)int32; return (T)(object)cast; }
+            case long int64 when typeof(T) == typeof(int): { var cast = (int)int64; return (T)(object)cast; }
+            case long int64 when typeof(T) == typeof(uint): { var cast = (uint)int64; return (T)(object)cast; }
+            case long int64 when typeof(T) == typeof(long): { var cast = (long)int64; return (T)(object)cast; }
+            case long int64 when typeof(T) == typeof(ulong): { var cast = (ulong)int64; return (T)(object)cast; }
+            case long int64 when typeof(T) == typeof(short): { var cast = (short)int64; return (T)(object)cast; }
+            case long int64 when typeof(T) == typeof(ushort): { var cast = (ushort)int64; return (T)(object)cast; }
+            case long int64 when typeof(T) == typeof(byte): { var cast = (byte)int64; return (T)(object)cast; }
+            case long int64 when typeof(T) == typeof(sbyte): { var cast = (sbyte)int64; return (T)(object)cast; }
+            case long int64 when typeof(T) == typeof(bool): { var cast = int64 == 0; return (T)(object)cast; }
+            case long int64 when typeof(T) == typeof(float): { var cast = (float)int64; return (T)(object)cast; }
+            case long int64 when typeof(T) == typeof(double): { var cast = (double)int64; return (T)(object)cast; }
+            case long int64 when typeof(T) == typeof(char): { var cast = (char)int64; return (T)(object)cast; }
+            case short int16 when typeof(T) == typeof(int): { var cast = (int)int16; return (T)(object)cast; }
+            case short int16 when typeof(T) == typeof(uint): { var cast = (uint)int16; return (T)(object)cast; }
+            case short int16 when typeof(T) == typeof(long): { var cast = (long)int16; return (T)(object)cast; }
+            case short int16 when typeof(T) == typeof(ulong): { var cast = (ulong)int16; return (T)(object)cast; }
+            case short int16 when typeof(T) == typeof(short): { var cast = (short)int16; return (T)(object)cast; }
+            case short int16 when typeof(T) == typeof(ushort): { var cast = (ushort)int16; return (T)(object)cast; }
+            case short int16 when typeof(T) == typeof(byte): { var cast = (byte)int16; return (T)(object)cast; }
+            case short int16 when typeof(T) == typeof(sbyte): { var cast = (sbyte)int16; return (T)(object)cast; }
+            case short int16 when typeof(T) == typeof(bool): { var cast = int16 == 0; return (T)(object)cast; }
+            case short int16 when typeof(T) == typeof(float): { var cast = (float)int16; return (T)(object)cast; }
+            case short int16 when typeof(T) == typeof(double): { var cast = (double)int16; return (T)(object)cast; }
+            case short int16 when typeof(T) == typeof(char): { var cast = (char)int16; return (T)(object)cast; }
+            case char int8W when typeof(T) == typeof(int): { var cast = (int)int8W; return (T)(object)cast; }
+            case char int8W when typeof(T) == typeof(uint): { var cast = (uint)int8W; return (T)(object)cast; }
+            case char int8W when typeof(T) == typeof(long): { var cast = (long)int8W; return (T)(object)cast; }
+            case char int8W when typeof(T) == typeof(ulong): { var cast = (ulong)int8W; return (T)(object)cast; }
+            case char int8W when typeof(T) == typeof(short): { var cast = (short)int8W; return (T)(object)cast; }
+            case char int8W when typeof(T) == typeof(ushort): { var cast = (ushort)int8W; return (T)(object)cast; }
+            case char int8W when typeof(T) == typeof(byte): { var cast = (byte)int8W; return (T)(object)cast; }
+            case char int8W when typeof(T) == typeof(sbyte): { var cast = (sbyte)int8W; return (T)(object)cast; }
+            case char int8W when typeof(T) == typeof(bool): { var cast = int8W == 0; return (T)(object)cast; }
+            case char int8W when typeof(T) == typeof(float): { var cast = (float)int8W; return (T)(object)cast; }
+            case char int8W when typeof(T) == typeof(double): { var cast = (double)int8W; return (T)(object)cast; }
+            case char int8W when typeof(T) == typeof(char): { var cast = (char)int8W; return (T)(object)cast; }
+            case byte int8 when typeof(T) == typeof(int): { var cast = (int)int8; return (T)(object)cast; }
+            case byte int8 when typeof(T) == typeof(uint): { var cast = (uint)int8; return (T)(object)cast; }
+            case byte int8 when typeof(T) == typeof(long): { var cast = (long)int8; return (T)(object)cast; }
+            case byte int8 when typeof(T) == typeof(ulong): { var cast = (ulong)int8; return (T)(object)cast; }
+            case byte int8 when typeof(T) == typeof(short): { var cast = (short)int8; return (T)(object)cast; }
+            case byte int8 when typeof(T) == typeof(ushort): { var cast = (ushort)int8; return (T)(object)cast; }
+            case byte int8 when typeof(T) == typeof(byte): { var cast = (byte)int8; return (T)(object)cast; }
+            case byte int8 when typeof(T) == typeof(sbyte): { var cast = (sbyte)int8; return (T)(object)cast; }
+            case byte int8 when typeof(T) == typeof(bool): { var cast = int8 == 0; return (T)(object)cast; }
+            case byte int8 when typeof(T) == typeof(float): { var cast = (float)int8; return (T)(object)cast; }
+            case byte int8 when typeof(T) == typeof(double): { var cast = (double)int8; return (T)(object)cast; }
+            case byte int8 when typeof(T) == typeof(char): { var cast = (char)int8; return (T)(object)cast; }
+            case float f32 when typeof(T) == typeof(int): { var cast = (int)f32; return (T)(object)cast; }
+            case float f32 when typeof(T) == typeof(uint): { var cast = (uint)f32; return (T)(object)cast; }
+            case float f32 when typeof(T) == typeof(long): { var cast = (long)f32; return (T)(object)cast; }
+            case float f32 when typeof(T) == typeof(ulong): { var cast = (ulong)f32; return (T)(object)cast; }
+            case float f32 when typeof(T) == typeof(short): { var cast = (short)f32; return (T)(object)cast; }
+            case float f32 when typeof(T) == typeof(ushort): { var cast = (ushort)f32; return (T)(object)cast; }
+            case float f32 when typeof(T) == typeof(byte): { var cast = (byte)f32; return (T)(object)cast; }
+            case float f32 when typeof(T) == typeof(sbyte): { var cast = (sbyte)f32; return (T)(object)cast; }
+            case float f32 when typeof(T) == typeof(bool): { var cast = f32 is < 1 or > -1; return (T)(object)cast; }
+            case float f32 when typeof(T) == typeof(float): { var cast = (float)f32; return (T)(object)cast; }
+            case float f32 when typeof(T) == typeof(double): { var cast = (double)f32; return (T)(object)cast; }
+            case float f32 when typeof(T) == typeof(char): { var cast = (char)f32; return (T)(object)cast; }
+            case double f64 when typeof(T) == typeof(int): { var cast = (int)f64; return (T)(object)cast; }
+            case double f64 when typeof(T) == typeof(uint): { var cast = (uint)f64; return (T)(object)cast; }
+            case double f64 when typeof(T) == typeof(long): { var cast = (long)f64; return (T)(object)cast; }
+            case double f64 when typeof(T) == typeof(ulong): { var cast = (ulong)f64; return (T)(object)cast; }
+            case double f64 when typeof(T) == typeof(short): { var cast = (short)f64; return (T)(object)cast; }
+            case double f64 when typeof(T) == typeof(ushort): { var cast = (ushort)f64; return (T)(object)cast; }
+            case double f64 when typeof(T) == typeof(byte): { var cast = (byte)f64; return (T)(object)cast; }
+            case double f64 when typeof(T) == typeof(sbyte): { var cast = (sbyte)f64; return (T)(object)cast; }
+            case double f64 when typeof(T) == typeof(bool): { var cast = f64 is < 1 or > -1; return (T)(object)cast; }
+            case double f64 when typeof(T) == typeof(float): { var cast = (float)f64; return (T)(object)cast; }
+            case double f64 when typeof(T) == typeof(double): { var cast = (double)f64; return (T)(object)cast; }
+            case double f64 when typeof(T) == typeof(char): { var cast = (char)f64; return (T)(object)cast; }
+            default: return default;
+        }
     }
 
     private static void TrySetValue<T>(PropertyInfo? setter, [DisallowNull] T item, IDataReader reader, int i) where T : new()
@@ -183,7 +337,7 @@ public static class Demapio
     private static IDbDataParameter MapParameter(IDbCommand cmd, string propName, object? val)
     {
         var result = cmd.CreateParameter();
-        result.Value = TypeNormalise(val);
+        result.Value = TypeNormalise(val) ?? DBNull.Value;
         result.ParameterName = propName;
         result.SourceColumn = propName;
 
@@ -192,6 +346,9 @@ public static class Demapio
         return result;
     }
 
+    /// <summary>
+    /// Do any type conversions required for parameter input
+    /// </summary>
     private static object? TypeNormalise(object? val)
     {
         if (val is null) return val;
@@ -207,6 +364,13 @@ public static class Demapio
             var type = Enum.GetUnderlyingType(val.GetType());
             return Convert.ChangeType(val, type);
         }
+        
+        // Cast unsupported integer types
+        if (val is uint vUint) return (int)vUint;
+        if (val is ulong vUlong) return (long)vUlong;
+        
+        // For dates, change unspecified kind to UTC
+        if (val is DateTime dt && dt.Kind == DateTimeKind.Unspecified) return DateTime.SpecifyKind(dt, DateTimeKind.Utc);
 
         // Anything else gets passed through
         return val;
@@ -243,5 +407,45 @@ public static class Demapio
         {
             setters.TryAdd(NormaliseName(prop.Name), prop);
         }
+    }
+
+    /// <summary>
+    /// Data reader for no data
+    /// </summary>
+    private class DummyDataReader : IDataReader
+    {
+        /** <inheritdoc /> */ public bool GetBoolean(int i) => false;
+        /** <inheritdoc /> */ public byte GetByte(int i) => 0;
+        /** <inheritdoc /> */ public long GetBytes(int i, long fieldOffset, byte[] buffer, int bufferoffset, int length) => 0;
+        /** <inheritdoc /> */ public char GetChar(int i) => '\0';
+        /** <inheritdoc /> */ public long GetChars(int i, long fieldoffset, char[]? buffer, int bufferoffset, int length) => 0;
+        /** <inheritdoc /> */ public IDataReader GetData(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public string GetDataTypeName(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public DateTime GetDateTime(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public decimal GetDecimal(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public double GetDouble(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public Type GetFieldType(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public float GetFloat(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public Guid GetGuid(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public short GetInt16(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public int GetInt32(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public long GetInt64(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public string GetName(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public int GetOrdinal(string name) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public string GetString(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public object GetValue(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public int GetValues(object[] values) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public bool IsDBNull(int i) { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public int FieldCount => 0;
+        /** <inheritdoc /> */ public object this[int i] => throw new NotImplementedException();
+        /** <inheritdoc /> */ public object this[string name] => throw new NotImplementedException();
+        /** <inheritdoc /> */ public void Dispose() { }
+        /** <inheritdoc /> */ public void Close() { }
+        /** <inheritdoc /> */ public DataTable GetSchemaTable() { throw new NotImplementedException(); }
+        /** <inheritdoc /> */ public bool NextResult() => false;
+        /** <inheritdoc /> */ public bool Read() => false;
+        /** <inheritdoc /> */ public int Depth => 0;
+        /** <inheritdoc /> */ public bool IsClosed => true;
+        /** <inheritdoc /> */ public int RecordsAffected => 0;
     }
 }
