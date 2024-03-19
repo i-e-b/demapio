@@ -435,11 +435,96 @@ CREATE TABLE IF NOT EXISTS TestTable (
         Assert.That(result.DateTwo.ToString("yyyy-MM-dd HH:mm:ss"), Is.EqualTo("2024-06-05 04:03:02"));
         Assert.That(result.DateThree.ToString("yyyy-MM-dd HH:mm:ss"), Is.EqualTo("2024-06-05 04:03:02"));
     }
+
+    [Test]
+    public void can_set_nullable_uuid_to_null_with_nullable_wrapped_value()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+        
+        conn.CountCommand(@"
+create table if not exists UuidTester
+(
+    Id              int not null,
+    GuidCol    uuid default null
+);
+truncate table UuidTester;
+");
+        
+        conn.RepeatCommand("INSERT INTO UuidTester (Id, GuidCol) VALUES (:id, :guidVal);",
+            new {id= 1, guidVal = Guid.NewGuid()},
+            new {id= 2, guidVal = Guid.Empty},
+            new {id= 3, guidVal = (Guid?)null});
+        
+        
+        var initial = conn.SelectType<GuidTestType>("SELECT * FROM UuidTester;").ToList();
+        Assert.That(initial[0].GuidCol, Is.Not.Null);
+        Assert.That(initial[1].GuidCol, Is.Not.Null);
+        Assert.That(initial[2].GuidCol, Is.Null);
+        
+        conn.RepeatCommand("UPDATE UuidTester SET GuidCol = :guidVal WHERE Id = :id;",
+                new {id= 1, guidVal = (Guid?)null},
+                new {id= 2, guidVal = (Guid?)null},
+                new {id= 3, guidVal = (Guid?)null}
+            );
+        
+        var after = conn.SelectType<GuidTestType>("SELECT * FROM UuidTester;").ToList();
+        
+        Assert.That(after[0].GuidCol, Is.Null);
+        Assert.That(after[1].GuidCol, Is.Null);
+        Assert.That(after[2].GuidCol, Is.Null);
+    }
+    
+    [Test]
+    public void can_read_arbitrary_data_into_dynamic_result()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+        
+        conn.CountCommand(@"
+create table if not exists DynamicTests
+(
+    Id              int not null,
+    StringCol       text default null,
+    IntCol          int default null,
+    ByteCol         bytea not null
+);
+truncate table DynamicTests;
+");
+        
+        conn.RepeatCommand("INSERT INTO DynamicTests (Id, StringCol, IntCol, ByteCol) VALUES (:id, :stringCol, :intCol, :byteCol);",
+            new {id= 1, stringCol = "one", intCol = 100, byteCol=new byte[]{1,2,3}},
+            new {id= 2, stringCol = (string?)null, intCol = 200, byteCol=new byte[]{4,5,6}},
+            new {id= 3, stringCol = "three", intCol = (int?)null, byteCol=new byte[]{7,8,9}}
+        );
+        
+        var result = conn.SelectDynamic("SELECT * FROM DynamicTests;").ToList();
+        
+        Assert.That(result.Count, Is.EqualTo(3));
+        Assert.That(result[0].id, Is.EqualTo(1), "should get value");
+        Assert.That(result[0].ID, Is.EqualTo(1), "values should be case insensitive");
+        
+        Assert.That(result[0].stringCol, Is.EqualTo("one"));
+        Assert.That(result[1].StringCol, Is.Null);
+        Assert.That(result[2].stringcol, Is.EqualTo("three"));
+        
+        Assert.That(result[0].intCol, Is.EqualTo(100));
+        Assert.That(result[1].IntCol, Is.EqualTo(200));
+        Assert.That(result[2].intcol, Is.Null);
+        
+        Assert.That(result[0].byteCol, Is.EqualTo(new byte[]{1,2,3}).AsCollection);
+        Assert.That(result[1].ByteCol, Is.EqualTo(new byte[]{4,5,6}).AsCollection);
+        Assert.That(result[2].bytecol, Is.EqualTo(new byte[]{7,8,9}).AsCollection);
+    }
 }
 
 // ReSharper disable InconsistentNaming
 // ReSharper disable UnusedMember.Global
 // ReSharper disable PropertyCanBeMadeInitOnly.Global
+
+public class GuidTestType
+{
+    public int Id { get; set; }
+    public Guid? GuidCol { get; set; }
+}
 
 public class DateTimeValues
 {

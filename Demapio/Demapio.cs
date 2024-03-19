@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
+using System.Dynamic;
 using System.Reflection;
 using System.Text;
 using JetBrains.Annotations;
@@ -19,9 +20,17 @@ public static class Demapio
     /// </summary>
     public static void RepeatCommand(this IDbConnection conn, string queryText, params object[] parameterObjects)
     {
-        foreach (var obj in parameterObjects)
+        var shouldClose = MaybeOpen(conn);
+        try
         {
-            conn.QueryValue(queryText, obj);
+            foreach (var obj in parameterObjects)
+            {
+                conn.QueryValue(queryText, obj);
+            }
+        }
+        finally
+        {
+            if (shouldClose) conn.Close();
         }
     }
 
@@ -30,18 +39,23 @@ public static class Demapio
     /// </summary>
     public static object? QueryValue(this IDbConnection conn, string queryText, object? parameters = null)
     {
-        if (conn.State != ConnectionState.Open) conn.Open();
+        var shouldClose = MaybeOpen(conn);
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            if (cmd.Parameters is null) throw new Exception("Database command did not populate Parameters");
+            cmd.CommandType = CommandType.Text;
+            cmd.CommandText = queryText;
 
-        using var cmd = conn.CreateCommand();
-        if (cmd.Parameters is null) throw new Exception("Database command did not populate Parameters");
-        cmd.CommandType = CommandType.Text;
-        cmd.CommandText = queryText;
+            AddParameters(parameters, cmd);
 
-        AddParameters(parameters, cmd);
-
-        var result = cmd.ExecuteScalar();
-        conn.Close();
-        return result;
+            var result = cmd.ExecuteScalar();
+            return result;
+        }
+        finally
+        {
+            if (shouldClose) conn.Close();
+        }
     }
     
     /// <summary>
@@ -49,18 +63,23 @@ public static class Demapio
     /// </summary>
     public static int CountCommand(this IDbConnection conn, string queryText, object? parameters = null)
     {
-        if (conn.State != ConnectionState.Open) conn.Open();
+        var shouldClose = MaybeOpen(conn);
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            if (cmd.Parameters is null) throw new Exception("Database command did not populate Parameters");
+            cmd.CommandType = CommandType.Text;
+            cmd.CommandText = queryText;
 
-        using var cmd = conn.CreateCommand();
-        if (cmd.Parameters is null) throw new Exception("Database command did not populate Parameters");
-        cmd.CommandType = CommandType.Text;
-        cmd.CommandText = queryText;
+            AddParameters(parameters, cmd);
 
-        AddParameters(parameters, cmd);
-
-        var result = cmd.ExecuteNonQuery();
-        conn.Close();
-        return result;
+            var result = cmd.ExecuteNonQuery();
+            return result;
+        }
+        finally
+        {
+            if (shouldClose) conn.Close();
+        }
     }
     
     /// <summary>
@@ -70,7 +89,7 @@ public static class Demapio
     [MustDisposeResource]
     public static IDataReader QueryReader(this IDbConnection conn, string queryText, object? parameters = null)
     {
-        if (conn.State != ConnectionState.Open) conn.Open();
+        MaybeOpen(conn);
 
         using var cmd = conn.CreateCommand();
         if (cmd.Parameters is null) throw new Exception("Database command did not populate Parameters");
@@ -91,57 +110,117 @@ public static class Demapio
     /// <typeparam name="T">Result object. Must have a public constructor with no parameters, and public settable properties matching the result columns</typeparam>
     public static IEnumerable<T> SelectType<T>(this IDbConnection conn, string queryText, object? parameters = null) where T : new()
     {
-        var shouldClose = false;
-        if (conn.State != ConnectionState.Open)
+        var shouldClose = MaybeOpen(conn);
+
+        try
         {
-            shouldClose = true;
-            conn.Open();
-        }
+            using var cmd = conn.CreateCommand();
+            if (cmd.Parameters is null) throw new Exception("Database command did not populate Parameters");
+            cmd.CommandType = CommandType.Text;
+            cmd.CommandText = queryText;
 
-        using var cmd = conn.CreateCommand();
-        if (cmd.Parameters is null) throw new Exception("Database command did not populate Parameters");
-        cmd.CommandType = CommandType.Text;
-        cmd.CommandText = queryText;
+            AddParameters(parameters, cmd);
 
-        AddParameters(parameters, cmd);
+            var setters = new Dictionary<string, PropertyInfo>();
+            using var reader = cmd.ExecuteReader();
+            var result = new List<T>();
 
-        var setters = new Dictionary<string, PropertyInfo>();
-        using var reader = cmd.ExecuteReader();
-        var result = new List<T>();
-
-        if (typeof(T).IsPrimitive) // map first result field to a primitive type
-        {
-            while (reader?.Read() == true)
+            if (typeof(T).IsPrimitive) // map first result field to a primitive type
             {
-                if (reader.FieldCount < 1) continue;
-                
-                var value = CastValue<T>(reader.GetValue(0));
-                if (value is not null) result.Add(value);
+                while (reader?.Read() == true)
+                {
+                    if (reader.FieldCount < 1) continue;
+
+                    var value = CastValue<T>(reader.GetValue(0));
+                    if (value is not null) result.Add(value);
+                }
             }
+            else // do property-mapping
+            {
+                while (reader?.Read() == true)
+                {
+                    if (setters.Count < 1) CacheWritableProperties<T>(setters);
+                    var count = reader.FieldCount;
+                    var item = new T();
+                    for (int i = 0; i < count; i++)
+                    {
+                        var column = NormaliseName(reader.GetName(i));
+                        if (!setters.TryGetValue(column, out var setter)) continue; // not writable column
+
+                        TrySetValue(setter, item, reader, i);
+                    }
+
+                    result.Add(item);
+                }
+            }
+
+            return result;
         }
-        else // do property-mapping
+        finally
         {
+            if (shouldClose) conn.Close();
+        }
+    }
+
+    /// <summary>
+    /// Select a variable number of result objects from a database, using a SQL query and a database connection.
+    /// <p>Input parameters will be mapped by property name</p>
+    /// <p>Resulting column names will be mapped to the properties of the result by name</p>
+    /// </summary>
+    public static IEnumerable<dynamic> SelectDynamic(this IDbConnection conn, string queryText, object? parameters = null)
+    {
+        var shouldClose = MaybeOpen(conn);
+
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            if (cmd.Parameters is null) throw new Exception("Database command did not populate Parameters");
+            cmd.CommandType = CommandType.Text;
+            cmd.CommandText = queryText;
+
+            AddParameters(parameters, cmd);
+
+            using var reader = cmd.ExecuteReader();
+
+            var result= new List<dynamic>();
             while (reader?.Read() == true)
             {
-                if (setters.Count < 1) CacheWritableProperties<T>(setters);
                 var count = reader.FieldCount;
-                var item = new T();
-                for (int i = 0; i < count; i++)
+                var item = new DynamicWrapper();
+                for (var i = 0; i < count; i++)
                 {
                     var column = NormaliseName(reader.GetName(i));
-                    if (!setters.TryGetValue(column, out var setter)) continue; // not writable column
-
-                    TrySetValue(setter, item, reader, i);
+                    if (reader.IsDBNull(i)) item.Bind(column, null);
+                    else item.Bind(column, reader.GetValue(i));
                 }
 
                 result.Add(item);
             }
+            return result;
         }
-
-        if (shouldClose) conn.Close();
-        return result;
+        finally
+        {
+            if (shouldClose) conn.Close();
+        }
     }
-    
+
+    #region Internals
+
+    private class DynamicWrapper : DynamicObject
+    {
+        private readonly Dictionary<string, object?> _store = new();
+        public void Bind(string key, object? value) => _store.Add(key.ToLowerInvariant(), value);
+        public override bool TryGetMember (GetMemberBinder binder, out object? result) => _store.TryGetValue(binder.Name?.ToLowerInvariant()??"", out result);
+    }
+
+    /// <summary> Open a connection if not already open. Returns <c>true</c> if the connection was opened. </summary>
+    private static bool MaybeOpen(IDbConnection conn)
+    {
+        if (conn.State == ConnectionState.Open) return false;
+        conn.Open();
+        return true;
+    }
+
     /// <summary>
     /// Try to cast an incoming DB value to a primitive type.
     /// If a cast is not possible, this will return null.
@@ -448,4 +527,5 @@ public static class Demapio
         /** <inheritdoc /> */ public bool IsClosed => true;
         /** <inheritdoc /> */ public int RecordsAffected => 0;
     }
+    #endregion Internals
 }

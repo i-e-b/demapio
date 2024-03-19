@@ -34,6 +34,15 @@ var conn = new NpgsqlConnection(ConnStr);
 var result = conn.SelectType<SamplePoco>("SELECT * FROM TestTable WHERE userId=:userId", new {userId = 10}).ToList()!;
 ```
 
+Query data to a list of dynamic C# objects:
+
+```
+var conn = new NpgsqlConnection(ConnStr);
+
+var result = conn.SelectDynamic("SELECT id, myValue FROM TestTable WHERE userId=:userId", new {userId = 10}).ToList()!;
+Console.WriteLine(result.id, result.myValue);
+```
+
 Repeat a single statement with a batch of parameters:
 
 ```
