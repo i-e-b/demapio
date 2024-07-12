@@ -135,6 +135,20 @@ public static class Demapio
                     if (value is not null) result.Add(value);
                 }
             }
+            else if (typeof(T).IsEnum)
+            {
+                var type = Enum.GetUnderlyingType(typeof(T));
+                while (reader?.Read() == true)
+                {
+                    if (reader.FieldCount < 1) continue;
+
+                    var value = reader.GetValue(0);
+                    if (value is not null)
+                    {
+                        result.Add((T)Convert.ChangeType(value, type));
+                    }
+                }
+            }
             else // do property-mapping
             {
                 while (reader?.Read() == true)
@@ -336,7 +350,8 @@ public static class Demapio
             }
 
             var targetType = Nullable.GetUnderlyingType(setter.PropertyType) ?? setter.PropertyType;
-            var targetIsListType = typeof(IEnumerable).IsAssignableFrom(targetType);
+            var targetIsListType = IsReallyAnEnumerableType(targetType);
+            var targetIsArray = targetType.IsArray;
 
             if (targetType.IsInstanceOfType(value)) // Simple case: type can be converted
             {
@@ -357,7 +372,7 @@ public static class Demapio
                     setter.SetValue(item, enumValue);
                 }
             }
-            else if (targetIsListType)
+            else if (targetIsListType || targetIsArray)
             {
                 var expectedType = typeof(IEnumerable<>).MakeGenericType(targetType.GetGenericArguments());
                 var enumerableConstructor = targetType.GetConstructor(new[]{expectedType});
@@ -371,6 +386,10 @@ public static class Demapio
                     throw new Exception($"Target type {targetType.Name} does not have a constructor taking {expectedType.Name}");
                 }
             }
+            else if (targetType == typeof(string))
+            {
+                setter.SetValue(item, value?.ToString());
+            }
             else // not exactly the type, and not an enum
             {
                 var baseType = Nullable.GetUnderlyingType(targetType);
@@ -382,6 +401,15 @@ public static class Demapio
         {
             throw new InvalidCastException($"Could not cast {value?.GetType().Name ?? "<null>"} to {setter.PropertyType.Name} for property {typeof(T).Name}.{setter.Name}", ex);
         }
+    }
+
+    private static bool IsReallyAnEnumerableType(Type targetType)
+    {
+        if (! typeof(IEnumerable).IsAssignableFrom(targetType)) return false;
+        
+        // There are some built-in types that are enumerable, but really shouldn't be
+        if (targetType == typeof(string)) return false;
+        return true;
     }
 
     private static void AddParameters(object? parameters, IDbCommand cmd)

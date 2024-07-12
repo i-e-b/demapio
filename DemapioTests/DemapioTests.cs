@@ -199,6 +199,10 @@ CREATE TABLE IF NOT EXISTS EnumTable (
         Assert.That(result, Is.Not.Null);
         Console.WriteLine(string.Join(", ", result));
         Assert.That(string.Join(", ", result), Is.EqualTo("2: APAC/Oceania/Philippines = 10.02, 4: APAC/Subcontinent/SriLanka = 20.04"));
+        
+        // Select directly into an enum
+        var enumResult = conn.SelectType<Geolocation>("SELECT location FROM EnumTable WHERE id = 2;").ToList();
+        Assert.That(enumResult[0], Is.EqualTo(Geolocation.Philippines), "Direct enum result");
     }
     
     [Test]
@@ -234,6 +238,10 @@ CREATE TABLE IF NOT EXISTS EnumStrTable (
         Assert.That(result, Is.Not.Null);
         Console.WriteLine(string.Join(", ", result));
         Assert.That(string.Join(", ", result), Is.EqualTo("2: APAC/Oceania/Philippines = 10.02, 4: APAC/Subcontinent/SriLanka = 20.04"));
+        
+        // Select directly into an enum
+        var enumResult = conn.SelectType<Geolocation>("SELECT location FROM EnumTable WHERE id = 2;").ToList();
+        Assert.That(enumResult[0], Is.EqualTo(Geolocation.Philippines), "Direct enum result");
     }
 
     [Test]
@@ -473,7 +481,32 @@ truncate table UuidTester;
         Assert.That(after[1].GuidCol, Is.Null);
         Assert.That(after[2].GuidCol, Is.Null);
     }
-    
+
+    [Test]
+    public void can_write_uuid_into_string_property()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+        
+        conn.CountCommand(@"
+create table if not exists UuidTester
+(
+    Id              int not null,
+    GuidCol    uuid default null
+);
+truncate table UuidTester;
+");
+        conn.RepeatCommand("INSERT INTO UuidTester (Id, GuidCol) VALUES (:id, :guidVal);",
+            new {id= 1, guidVal = Guid.Parse("94C8B00E-43E7-457E-9359-34C835D66692")},
+            new {id= 2, guidVal = Guid.Empty},
+            new {id= 3, guidVal = (Guid?)null});
+        
+        var result = conn.SelectType<GuidAsStringTestType>("SELECT * FROM UuidTester ORDER BY id;").ToList();
+
+        Assert.That(result[0].GuidCol, Is.EqualTo("94c8b00e-43e7-457e-9359-34c835d66692")); // Guid.ToString() gives lower case.
+        Assert.That(result[1].GuidCol, Is.EqualTo("00000000-0000-0000-0000-000000000000"));
+        Assert.That(result[2].GuidCol, Is.Null);
+    }
+
     [Test]
     public void can_read_arbitrary_data_into_dynamic_result()
     {
@@ -524,6 +557,12 @@ public class GuidTestType
 {
     public int Id { get; set; }
     public Guid? GuidCol { get; set; }
+}
+
+public class GuidAsStringTestType
+{
+    public int Id { get; set; }
+    public string? GuidCol { get; set; }
 }
 
 public class DateTimeValues
