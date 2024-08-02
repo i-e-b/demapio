@@ -108,7 +108,9 @@ public static class Demapio
     /// <p>Resulting column names will be mapped to the properties of <c>T</c> by name, case insensitive</p>
     /// </summary>
     /// <typeparam name="T">Result object. Must have a public constructor with no parameters, and public settable properties matching the result columns</typeparam>
-    public static IEnumerable<T> SelectType<T>(this IDbConnection conn, string queryText, object? parameters = null) where T : new()
+    public static IEnumerable<T> SelectType
+        <[MeansImplicitUse(ImplicitUseKindFlags.InstantiatedNoFixedConstructorSignature, ImplicitUseTargetFlags.WithMembers)]T>
+        (this IDbConnection conn, string queryText, object? parameters = null) where T : new()
     {
         var shouldClose = MaybeOpen(conn);
 
