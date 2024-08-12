@@ -25,10 +25,26 @@ namespace DemapioTests;
 [TestFixture]
 public class DemapioTests
 {
-    private const string ConnStr = @"Server=127.0.0.1;Port=26299;Database=testdb;User Id=root;Include Error Detail=true;CommandTimeout=360;Enlist=false;No Reset On Close=true;";
-
+    private const string ConnStr = "Server=127.0.0.1;Port=26299;Database=testdb;User Id=root;Include Error Detail=true;CommandTimeout=360;Enlist=false;No Reset On Close=true;";
+    
     [Test]
     public void querying_to_a_primitive_type()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+
+        var result1 = conn.SelectType<long>("SELECT 123;").First();
+        
+        Assert.That(result1, Is.EqualTo(123));
+        
+        var result2 = conn.SelectType<long?>("SELECT 123;").FirstOrDefault();
+        Assert.That(result2, Is.EqualTo(123));
+        
+        result2 = conn.SelectType<long?>("SELECT NULL;").FirstOrDefault();
+        Assert.That(result2, Is.Null);
+    }
+    
+    [Test]
+    public void querying_to_an_anonymous_type()
     {
         var conn = new NpgsqlConnection(ConnStr);
 
@@ -546,6 +562,63 @@ truncate table DynamicTests;
         Assert.That(result[0].byteCol, Is.EqualTo(new byte[]{1,2,3}).AsCollection);
         Assert.That(result[1].ByteCol, Is.EqualTo(new byte[]{4,5,6}).AsCollection);
         Assert.That(result[2].bytecol, Is.EqualTo(new byte[]{7,8,9}).AsCollection);
+    }
+
+    [Test]
+    public void using_ANY_set_from_different_list_types()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+
+        // Create a test table
+        conn.QueryValue(@"
+CREATE TABLE IF NOT EXISTS TestTable (
+    id        int  not null constraint ""primary"" primary key,
+    userId    bigint not null,
+    deviceId  text
+);
+");
+        
+        // Make sure it's empty
+        conn.QueryValue("TRUNCATE TABLE TestTable CASCADE;");
+        
+        // Add some test data
+        conn.RepeatCommand("INSERT INTO TestTable (id, userId, deviceId) VALUES (:id, :userId, :deviceId);",
+            new {id=1, userId=10, deviceId="User10 Phone"},
+            new {id=2, userId=10, deviceId="User10 PC"},
+            new {id=3, userId=20, deviceId="User20 Phone"},
+            new {id=4, userId=20, deviceId="User20 Modem"},
+            new {id=5, userId=30, deviceId="User30 Modem"},
+            new {id=6, userId=30, deviceId="User30 Phone"}
+        );
+        
+        const string selectSql = @"
+        SELECT *
+          FROM TestTable
+         WHERE id = ANY(:ids);
+        ";
+
+        // --- List<> ---
+        var listIds = new List<int> { 1, 3, 5 };
+        var result = conn.SelectType<SamplePoco>(selectSql, new { ids = listIds}).ToList();
+        Assert.That(result, Is.Not.Null);
+        Assert.That(string.Join(", ", result.Select(i=>i.Id)), Is.EqualTo("1, 3, 5"));
+        
+        // --- Array ---
+        var arrayIds = new []{1, 3, 5};
+        result = conn.SelectType<SamplePoco>(selectSql, new { ids = arrayIds}).ToList();
+        Assert.That(result, Is.Not.Null);
+        Assert.That(string.Join(", ", result.Select(i=>i.Id)), Is.EqualTo("1, 3, 5"));
+
+        // --- IEnumerable<> ---
+        var enumerableIds = ForceEnumeration(1, 3, 5);
+        result = conn.SelectType<SamplePoco>(selectSql, new { ids = enumerableIds}).ToList();
+        Assert.That(result, Is.Not.Null);
+        Assert.That(string.Join(", ", result.Select(i=>i.Id)), Is.EqualTo("1, 3, 5"));
+    }
+
+    private static IEnumerable<int> ForceEnumeration(params int[] ids)
+    {
+        foreach (var id in ids) yield return id;
     }
 }
 

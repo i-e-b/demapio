@@ -127,7 +127,10 @@ public static class Demapio
             using var reader = cmd.ExecuteReader();
             var result = new List<T>();
 
-            if (typeof(T).IsPrimitive) // map first result field to a primitive type
+            var targetType = typeof(T);
+            if (IsNullableWrapper(targetType)) targetType = targetType.GetGenericArguments().FirstOrDefault() ?? targetType;
+
+            if (targetType.IsPrimitive) // map first result field to a primitive type
             {
                 while (reader?.Read() == true)
                 {
@@ -137,7 +140,7 @@ public static class Demapio
                     if (value is not null) result.Add(value);
                 }
             }
-            else if (typeof(T).IsEnum)
+            else if (targetType.IsEnum)
             {
                 var type = Enum.GetUnderlyingType(typeof(T));
                 while (reader?.Read() == true)
@@ -228,7 +231,15 @@ public static class Demapio
         public void Bind(string key, object? value) => _store.Add(key.ToLowerInvariant(), value);
         public override bool TryGetMember (GetMemberBinder binder, out object? result) => _store.TryGetValue(binder.Name?.ToLowerInvariant()??"", out result);
     }
-
+    
+    /// <summary>
+    /// <c>true</c> if the type is <c>Nullable&lt;T&gt;</c>
+    /// </summary>
+    private static bool IsNullableWrapper(Type t)
+    {
+        return t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Nullable<>);
+    }
+    
     /// <summary> Open a connection if not already open. Returns <c>true</c> if the connection was opened. </summary>
     private static bool MaybeOpen(IDbConnection conn)
     {
@@ -390,7 +401,7 @@ public static class Demapio
             }
             else if (targetType == typeof(string))
             {
-                setter.SetValue(item, value?.ToString());
+                setter.SetValue(item, value.ToString());
             }
             else // not exactly the type, and not an enum
             {
@@ -403,15 +414,6 @@ public static class Demapio
         {
             throw new InvalidCastException($"Could not cast {value?.GetType().Name ?? "<null>"} to {setter.PropertyType.Name} for property {typeof(T).Name}.{setter.Name}", ex);
         }
-    }
-
-    private static bool IsReallyAnEnumerableType(Type targetType)
-    {
-        if (! typeof(IEnumerable).IsAssignableFrom(targetType)) return false;
-        
-        // There are some built-in types that are enumerable, but really shouldn't be
-        if (targetType == typeof(string)) return false;
-        return true;
     }
 
     private static void AddParameters(object? parameters, IDbCommand cmd)
@@ -473,7 +475,17 @@ public static class Demapio
             var type = Enum.GetUnderlyingType(val.GetType());
             return Convert.ChangeType(val, type);
         }
-        
+
+        if (val is string) return val; // Strings are IEnumerable 🙄
+
+        if (val is IEnumerable collection)// && HasSingleGenericType(val))
+        {
+            if (val.GetType().IsArray) return val;
+            if (val.GetType() == typeof(List<>)) return val;
+
+            return BuildListContainer(collection);
+        }
+
         // Cast unsupported integer types
         if (val is uint vUint) return (int)vUint;
         if (val is ulong vUlong) return (long)vUlong;
@@ -483,6 +495,51 @@ public static class Demapio
 
         // Anything else gets passed through
         return val;
+    }
+
+    private static bool IsReallyAnEnumerableType(Type targetType)
+    {
+        if (! typeof(IEnumerable).IsAssignableFrom(targetType)) return false;
+        
+        // There are some built-in types that are enumerable, but really shouldn't be
+        if (targetType == typeof(string)) return false;
+        return true;
+    }
+    
+    private static object BuildListContainer(IEnumerable collection)
+    {
+        var typeArgs = collection.GetType().GenericTypeArguments;
+        if (typeArgs.Length > 1) throw new Exception($"IEnumerable parameters must have exactly one element type, but '{collection.GetType().Name}' has '{typeArgs.Length}'");
+
+        Type? containedType = null;
+        if (typeArgs.Length < 1) // Tricky case, this is an untyped list
+        {
+            var subList = new ArrayList();
+            foreach (var item in collection)
+            {
+                containedType ??= item.GetType();
+                subList.Add(item);
+            }
+            collection = subList;
+        }
+        else
+        {
+            containedType = typeArgs[0];
+        }
+
+        var constructed = typeof(List<>).MakeGenericType(containedType);
+        var target = Activator.CreateInstance(constructed);
+        var adder = constructed.GetMethod("Add", BindingFlags.Public | BindingFlags.Instance);
+        if (adder is null) throw new Exception("Could not convert enumerable input for SQL. Try converting to array.");
+        var param = new object[1];
+        
+        foreach (var item in collection)
+        {
+            param[0] = item;
+            adder.Invoke(target, param);
+        }
+
+        return target;
     }
 
     private static IDbDataParameter NullParameter(IDbCommand cmd, string propName)
