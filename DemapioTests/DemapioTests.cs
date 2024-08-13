@@ -42,7 +42,26 @@ public class DemapioTests
         result2 = conn.SelectType<long?>("SELECT NULL;").FirstOrDefault();
         Assert.That(result2, Is.Null);
     }
-    
+
+    [Test]
+    public void querying_to_a_string()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+
+        // Because C# strings are immutable, we can't do this:
+        /*
+        var result1 = conn.SelectType<string>("SELECT 'Hello';").First();
+        Assert.That(result1, Is.EqualTo("Hello"));
+
+        var result2 = conn.SelectType<string?>("SELECT 'World!';").First();
+        Assert.That(result1, Is.EqualTo("World!"));
+        */
+        
+        // So we do this instead:
+        var result1 = conn.QueryValue("SELECT 'Hello';")?.ToString();
+        Assert.That(result1, Is.EqualTo("Hello"));
+    }
+
     [Test]
     public void querying_to_an_anonymous_type()
     {
