@@ -106,6 +106,7 @@ public static class Demapio
     /// Select a variable number of result objects from a database, using a SQL query and a database connection.
     /// <p>Input parameters will be mapped by property name</p>
     /// <p>Resulting column names will be mapped to the properties of <c>T</c> by name, case insensitive</p>
+    /// <p>Note that <c>string</c> cannot be used as the return type. Instead, use <c>conn.QueryValue(...)?.ToString()</c></p>
     /// </summary>
     /// <typeparam name="T">Result object. Must have a public constructor with no parameters, and public settable properties matching the result columns</typeparam>
     public static IEnumerable<T> SelectType
