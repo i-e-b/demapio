@@ -57,7 +57,7 @@ public static class Demapio
             if (shouldClose) conn.Close();
         }
     }
-    
+
     /// <summary>
     /// Run a SQL command, returning number of rows affected
     /// </summary>
@@ -81,7 +81,7 @@ public static class Demapio
             if (shouldClose) conn.Close();
         }
     }
-    
+
     /// <summary>
     /// Run a SQL command or query, returning a data reader.
     /// You MUST dispose of the resulting reader
@@ -106,12 +106,11 @@ public static class Demapio
     /// Select a variable number of result objects from a database, using a SQL query and a database connection.
     /// <p>Input parameters will be mapped by property name</p>
     /// <p>Resulting column names will be mapped to the properties of <c>T</c> by name, case insensitive</p>
-    /// <p>Note that <c>string</c> cannot be used as the return type. Instead, use <c>conn.QueryValue(...)?.ToString()</c></p>
     /// </summary>
     /// <typeparam name="T">Result object. Must have a public constructor with no parameters, and public settable properties matching the result columns</typeparam>
     public static IEnumerable<T> SelectType
         <[MeansImplicitUse(ImplicitUseKindFlags.InstantiatedNoFixedConstructorSignature, ImplicitUseTargetFlags.WithMembers)]T>
-        (this IDbConnection conn, string queryText, object? parameters = null) where T : new()
+        (this IDbConnection conn, string queryText, object? parameters = null) //where T : new()
     {
         var shouldClose = MaybeOpen(conn);
 
@@ -155,13 +154,25 @@ public static class Demapio
                     }
                 }
             }
+            else if (targetType == typeof(string))
+            {
+                var temp = new List<string>();
+                while (reader?.Read() == true)
+                {
+                    if (reader.FieldCount < 1) continue;
+
+                    var value = reader.GetValue(0)?.ToString();
+                    if (value is not null) temp.Add(value);
+                }
+                result.AddRange((IEnumerable<T>)temp); // C# compiler really doesn't like casting strings to generics.
+            }
             else // do property-mapping
             {
                 while (reader?.Read() == true)
                 {
                     if (setters.Count < 1) CacheWritableProperties<T>(setters);
                     var count = reader.FieldCount;
-                    var item = new T();
+                    var item  = Activator.CreateInstance<T>() ?? throw new Exception($"Type {typeof(T).Name} must have a parameter-free constructor.");
                     for (int i = 0; i < count; i++)
                     {
                         var column = NormaliseName(reader.GetName(i));
@@ -350,7 +361,7 @@ public static class Demapio
         }
     }
 
-    private static void TrySetValue<T>(PropertyInfo? setter, [DisallowNull] T item, IDataReader reader, int i) where T : new()
+    private static void TrySetValue<T>(PropertyInfo? setter, [DisallowNull] T item, IDataReader reader, int i) //where T : new()
     {
         if (setter is null) return;
         var value = reader.GetValue(i);

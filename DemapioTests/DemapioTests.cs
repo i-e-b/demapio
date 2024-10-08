@@ -49,17 +49,17 @@ public class DemapioTests
         var conn = new NpgsqlConnection(ConnStr);
 
         // Because C# strings are immutable, we can't do this:
-        /*
+
         var result1 = conn.SelectType<string>("SELECT 'Hello';").First();
         Assert.That(result1, Is.EqualTo("Hello"));
 
         var result2 = conn.SelectType<string?>("SELECT 'World!';").First();
-        Assert.That(result1, Is.EqualTo("World!"));
-        */
-        
+        Assert.That(result2, Is.EqualTo("World!"));
+
+
         // So we do this instead:
-        var result1 = conn.QueryValue("SELECT 'Hello';")?.ToString();
-        Assert.That(result1, Is.EqualTo("Hello"));
+        var result0 = conn.QueryValue("SELECT 'Hello';")?.ToString();
+        Assert.That(result0, Is.EqualTo("Hello"));
     }
 
     [Test]
