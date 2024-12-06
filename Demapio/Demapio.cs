@@ -18,7 +18,7 @@ public static class Demapio
     /// Repeat a single command with multiple parameter objects.
     /// <p>This does not return values. It should be used for batch inserts etc.</p>
     /// </summary>
-    public static void RepeatCommand(this IDbConnection conn, string queryText, params object[] parameterObjects)
+    public static void RepeatCommand(this IDbConnection conn, [LanguageInjection("sql")]string queryText, params object[] parameterObjects)
     {
         var shouldClose = MaybeOpen(conn);
         try
@@ -37,7 +37,7 @@ public static class Demapio
     /// <summary>
     /// Run a SQL command or query, returning a single value.
     /// </summary>
-    public static object? QueryValue(this IDbConnection conn, string queryText, object? parameters = null)
+    public static object? QueryValue(this IDbConnection conn, [LanguageInjection("sql")]string queryText, object? parameters = null)
     {
         var shouldClose = MaybeOpen(conn);
         try
@@ -61,7 +61,7 @@ public static class Demapio
     /// <summary>
     /// Run a SQL command, returning number of rows affected
     /// </summary>
-    public static int CountCommand(this IDbConnection conn, string queryText, object? parameters = null)
+    public static int CountCommand(this IDbConnection conn, [LanguageInjection("sql")]string queryText, object? parameters = null)
     {
         var shouldClose = MaybeOpen(conn);
         try
@@ -87,7 +87,7 @@ public static class Demapio
     /// You MUST dispose of the resulting reader
     /// </summary>
     [MustDisposeResource]
-    public static IDataReader QueryReader(this IDbConnection conn, string queryText, object? parameters = null)
+    public static IDataReader QueryReader(this IDbConnection conn, [LanguageInjection("sql")]string queryText, object? parameters = null)
     {
         MaybeOpen(conn);
 
@@ -110,7 +110,7 @@ public static class Demapio
     /// <typeparam name="T">Result object. Must have a public constructor with no parameters, and public settable properties matching the result columns</typeparam>
     public static IEnumerable<T> SelectType
         <[MeansImplicitUse(ImplicitUseKindFlags.InstantiatedNoFixedConstructorSignature, ImplicitUseTargetFlags.WithMembers)]T>
-        (this IDbConnection conn, string queryText, object? parameters = null) //where T : new()
+        (this IDbConnection conn, [LanguageInjection("sql")]string queryText, object? parameters = null) //where T : new()
     {
         var shouldClose = MaybeOpen(conn);
 
@@ -198,7 +198,7 @@ public static class Demapio
     /// <p>Input parameters will be mapped by property name</p>
     /// <p>Resulting column names will be mapped to the properties of the result by name</p>
     /// </summary>
-    public static IEnumerable<dynamic> SelectDynamic(this IDbConnection conn, string queryText, object? parameters = null)
+    public static IEnumerable<dynamic> SelectDynamic(this IDbConnection conn, [LanguageInjection("sql")]string queryText, object? parameters = null)
     {
         var shouldClose = MaybeOpen(conn);
 

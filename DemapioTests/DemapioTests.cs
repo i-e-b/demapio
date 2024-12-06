@@ -644,6 +644,7 @@ CREATE TABLE IF NOT EXISTS TestTable (
 // ReSharper disable InconsistentNaming
 // ReSharper disable UnusedMember.Global
 // ReSharper disable PropertyCanBeMadeInitOnly.Global
+// ReSharper disable UnusedAutoPropertyAccessor.Global
 
 public class GuidTestType
 {
