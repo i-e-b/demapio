@@ -635,6 +635,30 @@ CREATE TABLE IF NOT EXISTS TestTable (
         Assert.That(string.Join(", ", result.Select(i=>i.Id)), Is.EqualTo("1, 3, 5"));
     }
 
+    [Test]
+    public void can_read_nullable_date_time_with_null_and_non_null_data()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+
+        // Create a test table
+        conn.QueryValue(@"
+CREATE TABLE IF NOT EXISTS SingleDateTable (
+    nullableDate timestamp
+);
+TRUNCATE SingleDateTable;
+");
+        conn.RepeatCommand("INSERT INTO SingleDateTable (nullableDate) VALUES (:nullableDate);",
+            new { nullableDate = DateTime.UtcNow },
+            new { nullableDate = (DateTime?)null },
+            new { nullableDate = new DateTime(1,1,1,1,1,1) }
+        );
+
+
+        var result = conn.SelectType<DateTime?>("SELECT nullableDate FROM SingleDateTable;", new { }).ToList();
+
+        Console.WriteLine(string.Join("\r\n", result.Select(d=>d.ToString())));
+    }
+
     private static IEnumerable<int> ForceEnumeration(params int[] ids)
     {
         foreach (var id in ids) yield return id;

@@ -166,6 +166,16 @@ public static class Demapio
                 }
                 result.AddRange((IEnumerable<T>)temp); // C# compiler really doesn't like casting strings to generics.
             }
+            else if (targetType == typeof(DateTime))
+            {
+                while (reader?.Read() == true)
+                {
+                    if (reader.FieldCount < 1) continue;
+
+                    var value = CastValue<T>(reader.GetValue(0));
+                    if (value is not null) result.Add(value);
+                }
+            }
             else // do property-mapping
             {
                 while (reader?.Read() == true)
