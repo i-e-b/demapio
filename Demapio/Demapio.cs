@@ -571,8 +571,27 @@ public static class Demapio
     
     private static object BuildListContainer(IEnumerable collection)
     {
-        var typeArgs = collection.GetType().GenericTypeArguments;
-        if (typeArgs.Length > 1) throw new Exception($"IEnumerable parameters must have exactly one element type, but '{collection.GetType().Name}' has '{typeArgs.Length}'");
+        // "SelectListIterator<TSource, TResult>" etc. come from myList.Select((a)=>b);
+        // They have multiple types. Name = "IEnumerable`1", GenericTypeArguments[0]
+
+        Type[]? typeArgs;
+
+        // Try to find element type directly through IEnumerable<T> interface
+        var exactType      = collection.GetType();
+        var enumerableType = exactType.GetInterface("IEnumerable`1");
+        if (enumerableType is not null && enumerableType.GenericTypeArguments.Length == 1)
+        {
+            typeArgs = enumerableType.GenericTypeArguments;
+        }
+        // Otherwise, try to find through the actual type
+        else
+        {
+            typeArgs = collection.GetType().GenericTypeArguments;
+            if (typeArgs.Length > 1)
+            {
+                throw new Exception($"IEnumerable parameters must have exactly one element type, but '{collection.GetType().Name}' has '{typeArgs.Length}'");
+            }
+        }
 
         Type? containedType = null;
         if (typeArgs.Length < 1) // Tricky case, this is an untyped list
@@ -590,12 +609,18 @@ public static class Demapio
             containedType = typeArgs[0];
         }
 
+        if (containedType is null)
+        {
+            throw new Exception($"IEnumerable parameters must have exactly one element type, but could not find element type of '{collection.GetType().Name}'");
+        }
+
+        // Create a generic list of the given type. This helps Npgsql figure out the types on its side.
         var constructed = typeof(List<>).MakeGenericType(containedType);
         var target = Activator.CreateInstance(constructed);
         var adder = constructed.GetMethod("Add", BindingFlags.Public | BindingFlags.Instance);
         if (adder is null) throw new Exception("Could not convert enumerable input for SQL. Try converting to array.");
         var param = new object[1];
-        
+
         foreach (var item in collection)
         {
             param[0] = item;

@@ -1,5 +1,4 @@
-﻿using System.Data;
-using Demapio;
+﻿using Demapio;
 using Npgsql;
 using NUnit.Framework;
 // ReSharper disable AssignNullToNotNullAttribute
@@ -692,6 +691,44 @@ TRUNCATE WeirdTypeTable;
         {
             Demapio.Demapio.SetTypeMapping<WeirdType>(null, null);
         }
+    }
+
+    [Test]
+    public void can_take_linq_select_as_input()
+    {
+        using var conn = new NpgsqlConnection(ConnStr);
+
+        // Create a test table
+        conn.QueryValue(@"
+CREATE TABLE IF NOT EXISTS TestTable (
+    id        int  not null constraint ""primary"" primary key,
+    userId    bigint not null,
+    deviceId  text
+);
+");
+
+        // Make sure it's empty
+        conn.QueryValue("TRUNCATE TABLE TestTable CASCADE;");
+
+        // Add some test data
+        conn.RepeatCommand("INSERT INTO TestTable (id, userId, deviceId) VALUES (:id, :userId, :deviceId);",
+            new { id = 1, userId = 10, deviceId = "User10 Phone" },
+            new { id = 2, userId = 10, deviceId = "User10 PC" },
+            new { id = 3, userId = 20, deviceId = "User20 Phone" },
+            new { id = 4, userId = 20, deviceId = "User20 Modem" }
+        );
+
+        var listOfComposite = new List<SamplePoco> {
+            new() {Id = 1},
+            new() {Id = 3},
+            new() {Id = 5}
+        };
+
+        // `.Select` creates a `SelectListIterator<TSource,TResult>` type.
+        // This test makes sure we get the generic type from the `IEnumerable<T>` interface.
+        var result = conn.SelectType<SamplePoco>("SELECT * FROM TestTable WHERE id = ANY(:ids);", new { ids = listOfComposite.Select(c => c.Id) }).ToList();
+
+        Console.WriteLine(string.Join(", ", result));
     }
 
     private static IEnumerable<int> ForceEnumeration(params int[] ids)
