@@ -245,7 +245,29 @@ public static class Demapio
         }
     }
 
+    /// <summary>
+    /// Set the mapping between database and .Net types.
+    /// If a <c>null</c> value is given, the mapping is removed and Demapio will use its built in conversions.
+    /// Subsequent mappings for the same types will replace the previous mapping.
+    /// </summary>
+    /// <param name="toDotnet">Function to convert database values to .Net values</param>
+    /// <param name="toDatabase">Function to convert .Net values to database values</param>
+    /// <typeparam name="TNetType">The .Net type to map</typeparam>
+    public static void SetTypeMapping<TNetType>(Func<object?, TNetType?>? toDotnet, Func<TNetType?, object?>? toDatabase)
+    {
+        var key = typeof(TNetType);
+
+        if (toDotnet is null) _toDotnetMaps.Remove(key);
+        else _toDotnetMaps[key] = a => toDotnet(a);
+
+        if (toDatabase is null) _toSqlMaps.Remove(key);
+        else _toSqlMaps[key] = a => toDatabase((TNetType?)a);
+    }
+
     #region Internals
+
+    private static readonly IDictionary<Type, Func<object?, object?>> _toDotnetMaps = new Dictionary<Type, Func<object?, object?>>();
+    private static readonly IDictionary<Type, Func<object?, object?>> _toSqlMaps    = new Dictionary<Type, Func<object?, object?>>();
 
     private class DynamicWrapper : DynamicObject
     {
@@ -278,6 +300,7 @@ public static class Demapio
     /// <p/>
     /// The supported primitive output types are Boolean, Byte, SByte, Int16, UInt16, Int32, UInt32, Int64, UInt64, Char, Double, Single.
     /// </summary>
+    [SuppressMessage("ReSharper", "RedundantCast")]
     private static T? CastValue<T>(object? value)
     {
         switch (value)
@@ -388,6 +411,17 @@ public static class Demapio
             var targetIsListType = IsReallyAnEnumerableType(targetType);
             var targetIsArray = targetType.IsArray;
 
+            // Explicit mappings if provided
+            if (_toDotnetMaps.TryGetValue(targetType, out var mapper))
+            {
+                value = mapper(value);
+                if (value is null || value == DBNull.Value)
+                {
+                    setter.SetValue(item, null!);
+                    return;
+                }
+            }
+
             if (targetType.IsInstanceOfType(value)) // Simple case: type can be converted
             {
                 setter.SetValue(item, value);
@@ -482,41 +516,48 @@ public static class Demapio
     /// <summary>
     /// Do any type conversions required for parameter input
     /// </summary>
-    private static object? TypeNormalise(object? val)
+    private static object? TypeNormalise(object? value)
     {
-        if (val is null) return val;
+        if (value is null) return value;
 
-        if (val is IEnumerable<byte> byteList)
+        // Explicit mapping if provided
+        if (_toSqlMaps.TryGetValue(value.GetType(), out var mapper))
+        {
+            value = mapper(value);
+            if (value is null || value == DBNull.Value) return null;
+        }
+
+        if (value is IEnumerable<byte> byteList)
         {
             return byteList.ToArray();
         }
 
-        if (val.GetType().IsEnum)
+        if (value.GetType().IsEnum)
         {
             // cast enums to base type
-            var type = Enum.GetUnderlyingType(val.GetType());
-            return Convert.ChangeType(val, type);
+            var type = Enum.GetUnderlyingType(value.GetType());
+            return Convert.ChangeType(value, type);
         }
 
-        if (val is string) return val; // Strings are IEnumerable 🙄
+        if (value is string) return value; // Strings are IEnumerable 🙄
 
-        if (val is IEnumerable collection)// && HasSingleGenericType(val))
+        if (value is IEnumerable collection)// && HasSingleGenericType(val))
         {
-            if (val.GetType().IsArray) return val;
-            if (val.GetType() == typeof(List<>)) return val;
+            if (value.GetType().IsArray) return value;
+            if (value.GetType() == typeof(List<>)) return value;
 
             return BuildListContainer(collection);
         }
 
         // Cast unsupported integer types
-        if (val is uint vUint) return (int)vUint;
-        if (val is ulong vUlong) return (long)vUlong;
+        if (value is uint vUint) return (int)vUint;
+        if (value is ulong vUlong) return (long)vUlong;
         
         // For dates, change unspecified kind to UTC
-        if (val is DateTime dt) return DateTime.SpecifyKind(dt, DateTimeKind.Unspecified);
+        if (value is DateTime dt) return DateTime.SpecifyKind(dt, DateTimeKind.Unspecified);
 
         // Anything else gets passed through
-        return val;
+        return value;
     }
 
     private static bool IsReallyAnEnumerableType(Type targetType)

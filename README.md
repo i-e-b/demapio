@@ -73,3 +73,7 @@ var conn = new NpgsqlConnection(ConnStr);
 using var result = conn.QueryReader("SELECT * FROM TestTable WHERE userId=:userId", new {userId = 10});
 while (result.Read()) { ...
 ```
+
+### Custom type mappings
+
+You can add custom type mappings by calling `Demapio.SetTypeMapping((dbValue)=>FromDatabaseMethod(dbValue), (dotnetValue)=>ToDatabaseMethod(dotnetValue));`
