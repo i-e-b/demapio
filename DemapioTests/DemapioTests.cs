@@ -731,6 +731,33 @@ CREATE TABLE IF NOT EXISTS TestTable (
         Console.WriteLine(string.Join(", ", result));
     }
 
+    [Test]
+    public void row_count_can_be_read_as_nullable_int()
+    {
+        using var conn = new NpgsqlConnection(ConnStr);
+
+        // Create a test table
+        conn.QueryValue(@"
+DROP TABLE IF EXISTS CountingTable;
+CREATE TABLE IF NOT EXISTS CountingTable (
+    id        int  not null constraint ""primary"" primary key
+);
+");
+        // Add some test data
+        conn.RepeatCommand("INSERT INTO CountingTable (id) VALUES (:id);",
+            new { id = 1 },
+            new { id = 2 },
+            new { id = 3 },
+            new { id = 4 }
+        );
+
+
+        // Get count into a nullable int
+        var result = conn.SelectType<int?>("SELECT COUNT(*) FROM CountingTable WHERE id < 4;").FirstOrDefault() ?? 0;
+
+        Assert.That(result, Is.EqualTo(3));
+    }
+
     private static IEnumerable<int> ForceEnumeration(params int[] ids)
     {
         foreach (var id in ids) yield return id;

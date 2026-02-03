@@ -303,93 +303,96 @@ public static class Demapio
     [SuppressMessage("ReSharper", "RedundantCast")]
     private static T? CastValue<T>(object? value)
     {
+        var target = typeof(T);
+        if (IsNullableWrapper(target)) target = target.GetGenericArguments().FirstOrDefault() ?? target;
+
         switch (value)
         {
             case T directValue: return directValue;
-            case int int32 when typeof(T) == typeof(int): { var cast = (int)int32; return (T)(object)cast; }
-            case int int32 when typeof(T) == typeof(uint): { var cast = (uint)int32; return (T)(object)cast; }
-            case int int32 when typeof(T) == typeof(long): { var cast = (long)int32; return (T)(object)cast; }
-            case int int32 when typeof(T) == typeof(ulong): { var cast = (ulong)int32; return (T)(object)cast; }
-            case int int32 when typeof(T) == typeof(short): { var cast = (short)int32; return (T)(object)cast; }
-            case int int32 when typeof(T) == typeof(ushort): { var cast = (ushort)int32; return (T)(object)cast; }
-            case int int32 when typeof(T) == typeof(byte): { var cast = (byte)int32; return (T)(object)cast; }
-            case int int32 when typeof(T) == typeof(sbyte): { var cast = (sbyte)int32; return (T)(object)cast; }
-            case int int32 when typeof(T) == typeof(bool): { var cast = int32 == 0; return (T)(object)cast; }
-            case int int32 when typeof(T) == typeof(float): { var cast = (float)int32; return (T)(object)cast; }
-            case int int32 when typeof(T) == typeof(double): { var cast = (double)int32; return (T)(object)cast; }
-            case int int32 when typeof(T) == typeof(char): { var cast = (char)int32; return (T)(object)cast; }
-            case long int64 when typeof(T) == typeof(int): { var cast = (int)int64; return (T)(object)cast; }
-            case long int64 when typeof(T) == typeof(uint): { var cast = (uint)int64; return (T)(object)cast; }
-            case long int64 when typeof(T) == typeof(long): { var cast = (long)int64; return (T)(object)cast; }
-            case long int64 when typeof(T) == typeof(ulong): { var cast = (ulong)int64; return (T)(object)cast; }
-            case long int64 when typeof(T) == typeof(short): { var cast = (short)int64; return (T)(object)cast; }
-            case long int64 when typeof(T) == typeof(ushort): { var cast = (ushort)int64; return (T)(object)cast; }
-            case long int64 when typeof(T) == typeof(byte): { var cast = (byte)int64; return (T)(object)cast; }
-            case long int64 when typeof(T) == typeof(sbyte): { var cast = (sbyte)int64; return (T)(object)cast; }
-            case long int64 when typeof(T) == typeof(bool): { var cast = int64 == 0; return (T)(object)cast; }
-            case long int64 when typeof(T) == typeof(float): { var cast = (float)int64; return (T)(object)cast; }
-            case long int64 when typeof(T) == typeof(double): { var cast = (double)int64; return (T)(object)cast; }
-            case long int64 when typeof(T) == typeof(char): { var cast = (char)int64; return (T)(object)cast; }
-            case short int16 when typeof(T) == typeof(int): { var cast = (int)int16; return (T)(object)cast; }
-            case short int16 when typeof(T) == typeof(uint): { var cast = (uint)int16; return (T)(object)cast; }
-            case short int16 when typeof(T) == typeof(long): { var cast = (long)int16; return (T)(object)cast; }
-            case short int16 when typeof(T) == typeof(ulong): { var cast = (ulong)int16; return (T)(object)cast; }
-            case short int16 when typeof(T) == typeof(short): { var cast = (short)int16; return (T)(object)cast; }
-            case short int16 when typeof(T) == typeof(ushort): { var cast = (ushort)int16; return (T)(object)cast; }
-            case short int16 when typeof(T) == typeof(byte): { var cast = (byte)int16; return (T)(object)cast; }
-            case short int16 when typeof(T) == typeof(sbyte): { var cast = (sbyte)int16; return (T)(object)cast; }
-            case short int16 when typeof(T) == typeof(bool): { var cast = int16 == 0; return (T)(object)cast; }
-            case short int16 when typeof(T) == typeof(float): { var cast = (float)int16; return (T)(object)cast; }
-            case short int16 when typeof(T) == typeof(double): { var cast = (double)int16; return (T)(object)cast; }
-            case short int16 when typeof(T) == typeof(char): { var cast = (char)int16; return (T)(object)cast; }
-            case char int8W when typeof(T) == typeof(int): { var cast = (int)int8W; return (T)(object)cast; }
-            case char int8W when typeof(T) == typeof(uint): { var cast = (uint)int8W; return (T)(object)cast; }
-            case char int8W when typeof(T) == typeof(long): { var cast = (long)int8W; return (T)(object)cast; }
-            case char int8W when typeof(T) == typeof(ulong): { var cast = (ulong)int8W; return (T)(object)cast; }
-            case char int8W when typeof(T) == typeof(short): { var cast = (short)int8W; return (T)(object)cast; }
-            case char int8W when typeof(T) == typeof(ushort): { var cast = (ushort)int8W; return (T)(object)cast; }
-            case char int8W when typeof(T) == typeof(byte): { var cast = (byte)int8W; return (T)(object)cast; }
-            case char int8W when typeof(T) == typeof(sbyte): { var cast = (sbyte)int8W; return (T)(object)cast; }
-            case char int8W when typeof(T) == typeof(bool): { var cast = int8W == 0; return (T)(object)cast; }
-            case char int8W when typeof(T) == typeof(float): { var cast = (float)int8W; return (T)(object)cast; }
-            case char int8W when typeof(T) == typeof(double): { var cast = (double)int8W; return (T)(object)cast; }
-            case char int8W when typeof(T) == typeof(char): { var cast = (char)int8W; return (T)(object)cast; }
-            case byte int8 when typeof(T) == typeof(int): { var cast = (int)int8; return (T)(object)cast; }
-            case byte int8 when typeof(T) == typeof(uint): { var cast = (uint)int8; return (T)(object)cast; }
-            case byte int8 when typeof(T) == typeof(long): { var cast = (long)int8; return (T)(object)cast; }
-            case byte int8 when typeof(T) == typeof(ulong): { var cast = (ulong)int8; return (T)(object)cast; }
-            case byte int8 when typeof(T) == typeof(short): { var cast = (short)int8; return (T)(object)cast; }
-            case byte int8 when typeof(T) == typeof(ushort): { var cast = (ushort)int8; return (T)(object)cast; }
-            case byte int8 when typeof(T) == typeof(byte): { var cast = (byte)int8; return (T)(object)cast; }
-            case byte int8 when typeof(T) == typeof(sbyte): { var cast = (sbyte)int8; return (T)(object)cast; }
-            case byte int8 when typeof(T) == typeof(bool): { var cast = int8 == 0; return (T)(object)cast; }
-            case byte int8 when typeof(T) == typeof(float): { var cast = (float)int8; return (T)(object)cast; }
-            case byte int8 when typeof(T) == typeof(double): { var cast = (double)int8; return (T)(object)cast; }
-            case byte int8 when typeof(T) == typeof(char): { var cast = (char)int8; return (T)(object)cast; }
-            case float f32 when typeof(T) == typeof(int): { var cast = (int)f32; return (T)(object)cast; }
-            case float f32 when typeof(T) == typeof(uint): { var cast = (uint)f32; return (T)(object)cast; }
-            case float f32 when typeof(T) == typeof(long): { var cast = (long)f32; return (T)(object)cast; }
-            case float f32 when typeof(T) == typeof(ulong): { var cast = (ulong)f32; return (T)(object)cast; }
-            case float f32 when typeof(T) == typeof(short): { var cast = (short)f32; return (T)(object)cast; }
-            case float f32 when typeof(T) == typeof(ushort): { var cast = (ushort)f32; return (T)(object)cast; }
-            case float f32 when typeof(T) == typeof(byte): { var cast = (byte)f32; return (T)(object)cast; }
-            case float f32 when typeof(T) == typeof(sbyte): { var cast = (sbyte)f32; return (T)(object)cast; }
-            case float f32 when typeof(T) == typeof(bool): { var cast = f32 is < 1 or > -1; return (T)(object)cast; }
-            case float f32 when typeof(T) == typeof(float): { var cast = (float)f32; return (T)(object)cast; }
-            case float f32 when typeof(T) == typeof(double): { var cast = (double)f32; return (T)(object)cast; }
-            case float f32 when typeof(T) == typeof(char): { var cast = (char)f32; return (T)(object)cast; }
-            case double f64 when typeof(T) == typeof(int): { var cast = (int)f64; return (T)(object)cast; }
-            case double f64 when typeof(T) == typeof(uint): { var cast = (uint)f64; return (T)(object)cast; }
-            case double f64 when typeof(T) == typeof(long): { var cast = (long)f64; return (T)(object)cast; }
-            case double f64 when typeof(T) == typeof(ulong): { var cast = (ulong)f64; return (T)(object)cast; }
-            case double f64 when typeof(T) == typeof(short): { var cast = (short)f64; return (T)(object)cast; }
-            case double f64 when typeof(T) == typeof(ushort): { var cast = (ushort)f64; return (T)(object)cast; }
-            case double f64 when typeof(T) == typeof(byte): { var cast = (byte)f64; return (T)(object)cast; }
-            case double f64 when typeof(T) == typeof(sbyte): { var cast = (sbyte)f64; return (T)(object)cast; }
-            case double f64 when typeof(T) == typeof(bool): { var cast = f64 is < 1 or > -1; return (T)(object)cast; }
-            case double f64 when typeof(T) == typeof(float): { var cast = (float)f64; return (T)(object)cast; }
-            case double f64 when typeof(T) == typeof(double): { var cast = (double)f64; return (T)(object)cast; }
-            case double f64 when typeof(T) == typeof(char): { var cast = (char)f64; return (T)(object)cast; }
+            case int int32 when target == typeof(int): { var         cast = (int)int32; return (T)(object)cast; }
+            case int int32 when target == typeof(uint): { var        cast = (uint)int32; return (T)(object)cast; }
+            case int int32 when target == typeof(long): { var        cast = (long)int32; return (T)(object)cast; }
+            case int int32 when target == typeof(ulong): { var       cast = (ulong)int32; return (T)(object)cast; }
+            case int int32 when target == typeof(short): { var       cast = (short)int32; return (T)(object)cast; }
+            case int int32 when target == typeof(ushort): { var      cast = (ushort)int32; return (T)(object)cast; }
+            case int int32 when target == typeof(byte): { var        cast = (byte)int32; return (T)(object)cast; }
+            case int int32 when target == typeof(sbyte): { var       cast = (sbyte)int32; return (T)(object)cast; }
+            case int int32 when target == typeof(bool): { var        cast = int32 == 0; return (T)(object)cast; }
+            case int int32 when target == typeof(float): { var       cast = (float)int32; return (T)(object)cast; }
+            case int int32 when target == typeof(double): { var      cast = (double)int32; return (T)(object)cast; }
+            case int int32 when target == typeof(char): { var        cast = (char)int32; return (T)(object)cast; }
+            case long int64 when target == typeof(int): { var        cast = (int)int64; return (T)(object)cast; }
+            case long int64 when target == typeof(uint): { var       cast = (uint)int64; return (T)(object)cast; }
+            case long int64 when target == typeof(long): { var       cast = (long)int64; return (T)(object)cast; }
+            case long int64 when target == typeof(ulong): { var      cast = (ulong)int64; return (T)(object)cast; }
+            case long int64 when target == typeof(short): { var      cast = (short)int64; return (T)(object)cast; }
+            case long int64 when target == typeof(ushort): { var     cast = (ushort)int64; return (T)(object)cast; }
+            case long int64 when target == typeof(byte): { var       cast = (byte)int64; return (T)(object)cast; }
+            case long int64 when target == typeof(sbyte): { var      cast = (sbyte)int64; return (T)(object)cast; }
+            case long int64 when target == typeof(bool): { var       cast = int64 == 0; return (T)(object)cast; }
+            case long int64 when target == typeof(float): { var      cast = (float)int64; return (T)(object)cast; }
+            case long int64 when target == typeof(double): { var     cast = (double)int64; return (T)(object)cast; }
+            case long int64 when target == typeof(char): { var       cast = (char)int64; return (T)(object)cast; }
+            case short int16 when target == typeof(int): { var       cast = (int)int16; return (T)(object)cast; }
+            case short int16 when target == typeof(uint): { var      cast = (uint)int16; return (T)(object)cast; }
+            case short int16 when target == typeof(long): { var      cast = (long)int16; return (T)(object)cast; }
+            case short int16 when target == typeof(ulong): { var     cast = (ulong)int16; return (T)(object)cast; }
+            case short int16 when target == typeof(short): { var     cast = (short)int16; return (T)(object)cast; }
+            case short int16 when target == typeof(ushort): { var    cast = (ushort)int16; return (T)(object)cast; }
+            case short int16 when target == typeof(byte): { var   cast = (byte)int16; return (T)(object)cast; }
+            case short int16 when target == typeof(sbyte): { var  cast = (sbyte)int16; return (T)(object)cast; }
+            case short int16 when target == typeof(bool): { var   cast = int16 == 0; return (T)(object)cast; }
+            case short int16 when target == typeof(float): { var  cast = (float)int16; return (T)(object)cast; }
+            case short int16 when target == typeof(double): { var cast = (double)int16; return (T)(object)cast; }
+            case short int16 when target == typeof(char): { var   cast = (char)int16; return (T)(object)cast; }
+            case char int8W when target == typeof(int): { var     cast = (int)int8W; return (T)(object)cast; }
+            case char int8W when target == typeof(uint): { var    cast = (uint)int8W; return (T)(object)cast; }
+            case char int8W when target == typeof(long): { var    cast = (long)int8W; return (T)(object)cast; }
+            case char int8W when target == typeof(ulong): { var   cast = (ulong)int8W; return (T)(object)cast; }
+            case char int8W when target == typeof(short): { var   cast = (short)int8W; return (T)(object)cast; }
+            case char int8W when target == typeof(ushort): { var  cast = (ushort)int8W; return (T)(object)cast; }
+            case char int8W when target == typeof(byte): { var    cast = (byte)int8W; return (T)(object)cast; }
+            case char int8W when target == typeof(sbyte): { var   cast = (sbyte)int8W; return (T)(object)cast; }
+            case char int8W when target == typeof(bool): { var    cast = int8W == 0; return (T)(object)cast; }
+            case char int8W when target == typeof(float): { var   cast = (float)int8W; return (T)(object)cast; }
+            case char int8W when target == typeof(double): { var  cast = (double)int8W; return (T)(object)cast; }
+            case char int8W when target == typeof(char): { var    cast = (char)int8W; return (T)(object)cast; }
+            case byte int8 when target == typeof(int): { var      cast = (int)int8; return (T)(object)cast; }
+            case byte int8 when target == typeof(uint): { var     cast = (uint)int8; return (T)(object)cast; }
+            case byte int8 when target == typeof(long): { var     cast = (long)int8; return (T)(object)cast; }
+            case byte int8 when target == typeof(ulong): { var    cast = (ulong)int8; return (T)(object)cast; }
+            case byte int8 when target == typeof(short): { var    cast = (short)int8; return (T)(object)cast; }
+            case byte int8 when target == typeof(ushort): { var   cast = (ushort)int8; return (T)(object)cast; }
+            case byte int8 when target == typeof(byte): { var     cast = (byte)int8; return (T)(object)cast; }
+            case byte int8 when target == typeof(sbyte): { var    cast = (sbyte)int8; return (T)(object)cast; }
+            case byte int8 when target == typeof(bool): { var     cast = int8 == 0; return (T)(object)cast; }
+            case byte int8 when target == typeof(float): { var    cast = (float)int8; return (T)(object)cast; }
+            case byte int8 when target == typeof(double): { var   cast = (double)int8; return (T)(object)cast; }
+            case byte int8 when target == typeof(char): { var     cast = (char)int8; return (T)(object)cast; }
+            case float f32 when target == typeof(int): { var      cast = (int)f32; return (T)(object)cast; }
+            case float f32 when target == typeof(uint): { var     cast = (uint)f32; return (T)(object)cast; }
+            case float f32 when target == typeof(long): { var     cast = (long)f32; return (T)(object)cast; }
+            case float f32 when target == typeof(ulong): { var    cast = (ulong)f32; return (T)(object)cast; }
+            case float f32 when target == typeof(short): { var    cast = (short)f32; return (T)(object)cast; }
+            case float f32 when target == typeof(ushort): { var   cast = (ushort)f32; return (T)(object)cast; }
+            case float f32 when target == typeof(byte): { var     cast = (byte)f32; return (T)(object)cast; }
+            case float f32 when target == typeof(sbyte): { var    cast = (sbyte)f32; return (T)(object)cast; }
+            case float f32 when target == typeof(bool): { var     cast = f32 is < 1 or > -1; return (T)(object)cast; }
+            case float f32 when target == typeof(float): { var    cast = (float)f32; return (T)(object)cast; }
+            case float f32 when target == typeof(double): { var   cast = (double)f32; return (T)(object)cast; }
+            case float f32 when target == typeof(char): { var     cast = (char)f32; return (T)(object)cast; }
+            case double f64 when target == typeof(int): { var     cast = (int)f64; return (T)(object)cast; }
+            case double f64 when target == typeof(uint): { var    cast = (uint)f64; return (T)(object)cast; }
+            case double f64 when target == typeof(long): { var    cast = (long)f64; return (T)(object)cast; }
+            case double f64 when target == typeof(ulong): { var   cast = (ulong)f64; return (T)(object)cast; }
+            case double f64 when target == typeof(short): { var   cast = (short)f64; return (T)(object)cast; }
+            case double f64 when target == typeof(ushort): { var  cast = (ushort)f64; return (T)(object)cast; }
+            case double f64 when target == typeof(byte): { var    cast = (byte)f64; return (T)(object)cast; }
+            case double f64 when target == typeof(sbyte): { var   cast = (sbyte)f64; return (T)(object)cast; }
+            case double f64 when target == typeof(bool): { var    cast = f64 is < 1 or > -1; return (T)(object)cast; }
+            case double f64 when target == typeof(float): { var   cast = (float)f64; return (T)(object)cast; }
+            case double f64 when target == typeof(double): { var  cast = (double)f64; return (T)(object)cast; }
+            case double f64 when target == typeof(char): { var    cast = (char)f64; return (T)(object)cast; }
             default: return default;
         }
     }
