@@ -732,6 +732,31 @@ CREATE TABLE IF NOT EXISTS TestTable (
     }
 
     [Test]
+    public void can_use_get_only_properties_for_insert()
+    {
+        using var conn = new NpgsqlConnection(ConnStr);
+
+        // Create a test table
+        conn.QueryValue(@"
+CREATE TABLE IF NOT EXISTS GetPropTable ( mix  text );
+");
+        // Make sure it's empty
+        conn.QueryValue("TRUNCATE TABLE GetPropTable CASCADE;");
+
+        var parameters = new GeneratedPropertyType
+        {
+            PartA = "Monomer",
+            PartB = "Cross-link agent"
+        };
+
+        conn.QueryValue("INSERT INTO GetPropTable (mix) VALUES (:Mix);", parameters);
+
+        var result = conn.SelectType<string>("SELECT mix FROM GetPropTable").ToList();
+
+        Assert.That(result[0], Is.EqualTo("Mix Monomer with Cross-link agent"));
+    }
+
+    [Test]
     public void row_count_can_be_read_as_nullable_int()
     {
         using var conn = new NpgsqlConnection(ConnStr);
@@ -804,6 +829,14 @@ public class WeirdType
     {
         return Message;
     }
+}
+
+public class GeneratedPropertyType
+{
+    public string PartA { get; set; } = "";
+    public string PartB { get; set; } = "";
+
+    public string Mix => $"Mix {PartA} with {PartB}";
 }
 
 public class GuidTestType
