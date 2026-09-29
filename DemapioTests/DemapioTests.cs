@@ -261,18 +261,89 @@ CREATE TABLE IF NOT EXISTS EnumStrTable (
 
         // Add some test data
         conn.RepeatCommand("INSERT INTO EnumStrTable (id, sales, location, landmass, zone) VALUES (:id, :sales, :location, :landmass, :zone);",
-            new { id = 1, sales = 10.01, location = Geolocation.Cameroon.ToString(), landmass = GeoLandmass.SubSahara.ToString(), zone = GeoZone.EMEA.ToString() },
-            new { id = 2, sales = 10.02, location = Geolocation.Philippines.ToString(), landmass = GeoLandmass.Oceania.ToString(), zone = GeoZone.APAC.ToString() },
-            new { id = 3, sales = 20.03, location = Geolocation.Ukraine.ToString(), landmass = GeoLandmass.Europe.ToString(), zone = GeoZone.EMEA.ToString() },
-            new { id = 4, sales = 20.04, location = Geolocation.SriLanka.ToString(), landmass = GeoLandmass.Subcontinent.ToString(), zone = GeoZone.APAC.ToString() }
+            new { id = 1, sales = 10.01, location = nameof(Geolocation.Cameroon), landmass = nameof(GeoLandmass.SubSahara), zone = nameof(GeoZone.EMEA) },
+            new { id = 2, sales = 10.02, location = nameof(Geolocation.Philippines), landmass = nameof(GeoLandmass.Oceania), zone = nameof(GeoZone.APAC) },
+            new { id = 3, sales = 20.03, location = nameof(Geolocation.Ukraine), landmass = nameof(GeoLandmass.Europe), zone = nameof(GeoZone.EMEA) },
+            new { id = 4, sales = 20.04, location = nameof(Geolocation.SriLanka), landmass = nameof(GeoLandmass.Subcontinent), zone = nameof(GeoZone.APAC) }
         );
 
         // Query data back out
-        var result = conn.SelectType<PocoWithEnums>("SELECT * FROM EnumStrTable WHERE zone = :zone;", new { zone = GeoZone.APAC.ToString() }).ToList();
+        var result = conn.SelectType<PocoWithEnums>("SELECT * FROM EnumStrTable WHERE zone = :zone;", new { zone = nameof(GeoZone.APAC) }).ToList();
 
         Assert.That(result, Is.Not.Null);
         Console.WriteLine(string.Join(", ", result));
         Assert.That(string.Join(", ", result), Is.EqualTo("2: APAC/Oceania/Philippines = 10.02, 4: APAC/Subcontinent/SriLanka = 20.04"));
+
+        // Select directly into an enum
+        var enumResult = conn.SelectType<Geolocation>("SELECT location FROM EnumTable WHERE id = 2;").ToList();
+        Assert.That(enumResult[0], Is.EqualTo(Geolocation.Philippines), "Direct enum result");
+    }
+
+    [Test]
+    public void invalid_enums_throw_exceptions_if_no_default_value_is_given ()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+
+        // Create a test table
+        conn.QueryValue(@"
+CREATE TABLE IF NOT EXISTS EnumStrTable (
+    id        int not null constraint ""primary"" primary key,
+    sales     decimal not null,
+    location  text,
+    landmass  text,
+    zone      text
+);
+");
+
+        // Make sure it's empty
+        conn.QueryValue("TRUNCATE TABLE EnumStrTable CASCADE;");
+
+        // Add some test data
+        conn.RepeatCommand("INSERT INTO EnumStrTable (id, sales, location, landmass, zone) VALUES (:id, :sales, :location, :landmass, :zone);",
+            new { id = 20, sales = 10.02, location = nameof(Geolocation.Philippines), landmass = "INVALID", zone = nameof(GeoZone.APAC) },
+            new { id = 30, sales = 10.02, location = nameof(Geolocation.Philippines), landmass = nameof(GeoLandmass.Oceania), zone = "INVALID" }
+        );
+
+        // Query data back out
+        var exception = Assert.Throws<InvalidCastException>(() =>
+        {
+            conn.SelectType<PocoWithEnums>("SELECT * FROM EnumStrTable;");
+        });
+
+        Assert.That(exception.ToString(), Contains.Substring("Enum 'GeoLandmass' does not have a value matching database entry 'INVALID'"));
+    }
+
+    [Test]
+    public void setting_a_default_value_will_allow_invalid_enum_data_to_be_accepted ()
+    {
+        var conn = new NpgsqlConnection(ConnStr);
+
+        // Create a test table
+        conn.QueryValue(@"
+CREATE TABLE IF NOT EXISTS EnumStrTable (
+    id        int not null constraint ""primary"" primary key,
+    sales     decimal not null,
+    location  text,
+    landmass  text,
+    zone      text
+);
+");
+
+        // Make sure it's empty
+        conn.QueryValue("TRUNCATE TABLE EnumStrTable CASCADE;");
+
+        // Add some test data
+        conn.RepeatCommand("INSERT INTO EnumStrTable (id, sales, location, landmass, zone) VALUES (:id, :sales, :location, :landmass, :zone);",
+            new { id = 1, sales = 10.01, location = "INVALID", landmass = nameof(GeoLandmass.SubSahara), zone = nameof(GeoZone.EMEA) },
+            new { id = 2, sales = 10.02, location = nameof(Geolocation.Philippines), landmass = nameof(GeoLandmass.Oceania), zone = nameof(GeoZone.APAC) }
+        );
+
+        // Query data back out
+        var result = conn.SelectType<PocoWithEnums>("SELECT * FROM EnumStrTable;").ToList();
+
+        Assert.That(result, Is.Not.Null);
+        Console.WriteLine(string.Join(", ", result));
+        Assert.That(string.Join(", ", result), Is.EqualTo("1: EMEA/SubSahara/Kenya = 10.01, 2: APAC/Oceania/Philippines = 10.02"));
 
         // Select directly into an enum
         var enumResult = conn.SelectType<Geolocation>("SELECT location FROM EnumTable WHERE id = 2;").ToList();
@@ -787,178 +858,4 @@ CREATE TABLE IF NOT EXISTS CountingTable (
     {
         foreach (var id in ids) yield return id;
     }
-}
-
-// ReSharper disable InconsistentNaming
-// ReSharper disable UnusedMember.Global
-// ReSharper disable PropertyCanBeMadeInitOnly.Global
-// ReSharper disable UnusedAutoPropertyAccessor.Global
-
-public class WeirdContainer
-{
-    public int Id { get; set; }
-
-    public WeirdType? TypeValue { get; set; }
-
-    public override string ToString()
-    {
-        return $"Id={Id}; TypeValue={TypeValue};";
-    }
-}
-
-public class WeirdType
-{
-    public WeirdType(string msg)
-    {
-        Message = msg;
-    }
-
-    public string Message { get; set; }
-
-    public static WeirdType? FromText(object? arg)
-    {
-        return arg is null ? null : new WeirdType(arg.ToString()!);
-    }
-
-    public static object? ToText(WeirdType? arg)
-    {
-        return arg?.Message;
-    }
-
-    public override string ToString()
-    {
-        return Message;
-    }
-}
-
-public class GeneratedPropertyType
-{
-    public string PartA { get; set; } = "";
-    public string PartB { get; set; } = "";
-
-    public string Mix => $"Mix {PartA} with {PartB}";
-}
-
-public class GuidTestType
-{
-    public int Id { get; set; }
-    public Guid? GuidCol { get; set; }
-}
-
-public class GuidAsStringTestType
-{
-    public int Id { get; set; }
-    public string? GuidCol { get; set; }
-}
-
-public class DateTimeValues
-{
-    public DateTime? NullableDateOne { get; set; }
-    public DateTime? NullableDateTwo { get; set; }
-    public DateTime DateOne { get; set; }
-    public DateTime DateTwo { get; set; }
-    public DateTime DateThree { get; set; }
-}
-
-public class ByteArrayValue
-{
-    public int Id { get; set; }
-    public byte[] Data { get; set; } = Array.Empty<byte>();
-    
-    public override string ToString()
-    {
-        return $"ID={Id}; Data='{Convert.ToHexString(Data)}'";
-    }
-}
-public class ByteListValue
-{
-    public int Id { get; set; }
-    // ReSharper disable once CollectionNeverUpdated.Global
-    public List<byte> Data { get; set; } = new();
-    
-    public override string ToString()
-    {
-        return $"ID={Id}; Data='{Convert.ToHexString(Data.ToArray())}'";
-    }
-}
-public class ByteEnumerableValue
-{
-    public int Id { get; set; }
-    public IEnumerable<byte>? Data { get; set; }
-    
-    public override string ToString()
-    {
-        if (Data is null) return $"ID={Id}; Data=<null>";
-        return $"ID={Id}; Data='{Convert.ToHexString(Data.ToArray())}'";
-    }
-}
-
-public class NullablePrimitives
-{
-    public long? NLong { get; set; }
-    public int? NInt { get; set; }
-    public GeoZone? NEnum { get; set; }
-
-    private static string MarkNulls<T>(T thing) => thing?.ToString() ?? "<null>";
-
-    public override string ToString()
-    {
-        return $"NLong={MarkNulls(NLong)}; NInt={MarkNulls(NInt)}; NEnum='{MarkNulls(NEnum)}'";
-    }
-}
-
-public class PocoWithEnums
-{
-    public int Id { get; set; }
-    public Geolocation Location { get; set; }
-    public GeoLandmass Landmass { get; set; }
-    public GeoZone Zone { get; set; }
-    public double Sales { get; set; }
-    
-    public override string ToString()
-    {
-        return $"{Id}: {Zone.ToString()}/{Landmass.ToString()}/{Location.ToString()} = {Sales:0.00}";
-    }
-}
-
-public class SamplePoco
-{
-    public int Id { get; set; }
-    public long UserId { get; set; }
-    public string? DeviceId { get; set; }
-
-    public override string ToString()
-    {
-        return $"Id={Id}; UserId={UserId}; DeviceId='{DeviceId}'";
-    }
-}
-
-
-public enum GeoZone : long
-{
-    APAC, EMEA, AMER
-}
-
-public enum GeoLandmass: long
-{
-    Europe, WestAsia, EastAsia, Subcontinent, NorthAfrica, SubSahara,
-    Oceania, NorthAmerica, CentralAmerica, SouthAmerica, Other
-}
-
-public enum Geolocation: long
-{
-    China, India, USA, Indonesia, Pakistan, Nigeria,
-    Brazil, Bangladesh, Russia, Mexico, Japan,
-    Philippines, Ethiopia, Egypt, Vietnam, DrCongo,
-    Iran, Turkey, Germany, France, UK, Thailand,
-    Tanzania, SouthAfrica, Italy, Myanmar, SouthKorea,
-    Colombia, Spain, Kenya, Argentina, Algeria,
-    Sudan, Uganda, Iraq, Ukraine, Canada, Poland,
-    Morocco, Uzbekistan, SaudiArabia, Yemen, Peru,
-    Angola, Afghanistan, Malaysia, Mozambique, Ghana,
-    IvoryCoast, Nepal, Venezuela, Madagascar,
-    Australia, NorthKorea, Cameroon, Niger, Taiwan,
-    Mali, SriLanka, Syria, BurkinaFaso, Malawi,
-    Chile, Kazakhstan, Zambia, Romania, Ecuador,
-    Netherlands, Somalia, Senegal, Guatemala, Chad
 }

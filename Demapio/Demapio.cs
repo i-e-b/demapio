@@ -434,13 +434,13 @@ public static class Demapio
                 // cast enums to base type, or parse from string
                 if (value is string str) // try to parse
                 {
-                    setter.SetValue(item, Enum.Parse(targetType, str));
+                    setter.SetValue(item, ParseEnumOrDefault(targetType, str));
                 }
                 else // try to directly cast to underlying type
                 {
-                    var enumType = Enum.GetUnderlyingType(targetType);
+                    var enumType   = Enum.GetUnderlyingType(targetType);
                     var basicValue = Convert.ChangeType(value, enumType);
-                    var enumValue = Enum.ToObject(targetType, basicValue!);
+                    var enumValue  = Enum.ToObject(targetType, basicValue!);
                     setter.SetValue(item, enumValue);
                 }
             }
@@ -472,6 +472,25 @@ public static class Demapio
         catch (Exception ex)
         {
             throw new InvalidCastException($"Could not cast {value?.GetType().Name ?? "<null>"} to {setter.PropertyType.Name} for property {typeof(T).Name}.{setter.Name}", ex);
+        }
+    }
+
+    private static object ParseEnumOrDefault(Type targetType, string str)
+    {
+        try
+        {
+            return Enum.Parse(targetType, str);
+        }
+        catch (ArgumentException ex)
+        {
+            // Handle invalid values where Enum has a default value set
+            var defaults = targetType.GetCustomAttributes<DefaultValueAttribute>().ToList();
+            if (defaults.Count > 0)
+            {
+                return Enum.ToObject(targetType, defaults[0].Value);
+            }
+
+            throw new InvalidCastException($"Enum '{targetType.Name}' does not have a value matching database entry '{str}'", ex);
         }
     }
 
